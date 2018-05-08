@@ -149,7 +149,6 @@ var myKeyHandler = function(e){
         } 
         keyTimout=null;
     }, 500);
-    
     switch(e.keyCode){
         case $js.keycode.q:
             prev_chapter();
@@ -176,6 +175,12 @@ var myKeyHandler = function(e){
                 }, 30);
             }
             e.preventDefault();
+            break;
+        case 190: // .
+            next_page();
+            break;
+        case 188: // ,
+            prev_page();
             break;
     }
     return;
@@ -293,6 +298,151 @@ var config = {
 };
 config.init();
 
+var minfo = {
+    cacheKey: "mangaInfo",
+    init: function() {
+        if (!(this.cacheKey in window.localStorage)) {
+            window.localStorage[this.cacheKey] = JSON.stringify({});
+        }
+    },
+    saveInfo: function(id, info) {
+        if (info.id == "") {
+            info.id = id;
+        } else if(info.id != id) {
+            console.log({msg:"Error: Manga IDs do not match in saveMangaInfo.", id: id, info: info});
+            alert("Error: Trying to save manga id " + id + " with non-matching info.id " + info.id);
+            return;
+        }
+        var cache = this.getCache();
+        cache[id] = info;
+        window.localStorage[this.cacheKey] = JSON.stringify(cache);
+    },
+    getCache: function() {
+        return JSON.parse(window.localStorage[this.cacheKey]);
+    },
+    getInfo: function(id) {
+        var cache = this.getCache();
+        if (id in cache) {
+            return cache[id];
+        }
+        return false;
+    },
+    parse: function(doc, url=undefined) {
+        var getInfoColumn = function(infoLabel, init=undefined, clean = true) {
+            $trs = $$js("div.col-sm-9 table tr", doc);
+            for (var i = 0 ; i < $trs.length; ++i) {
+                var $tr = $trs[i];
+                if (infoLabel.test($tr.children[0].innerHTML)) {
+                    return clean ? $tr.children[1].innerText : $tr.children[1].innerHTML;
+                }
+            }
+            // Couldn't Find
+            return init;
+        };
+        var getInfoList = function(infoLabel, eltype, init=[]) {
+            $trs = $$js("div.col-sm-9 table tr", doc);
+            for (var i = 0 ; i < $trs.length; ++i) {
+                var $tr = $trs[i];
+                if (infoLabel.test($tr.children[0].innerHTML)) {
+                    var values = [];
+                    var $els = $$js(eltype, $tr.children[1]);
+                    for (var j = 0; j < $els.length; ++j) {
+                        values.push($els[j].textContent.trim());
+                    }
+                    return values;
+                }
+            }
+            // Couldn't Find
+            return init;
+        };
+        var info = {}; 
+        info.title = $js("h3.panel-title", doc).innerText.trim();
+        info.status = getInfoColumn(/status/i, "Unknown");
+        info.description = getInfoColumn(/description/i, "Unknown", false);
+        info.author = getInfoColumn(/author/i, "Unknown");
+        info.artist = getInfoColumn(/artist/i, "Unknown");
+        
+        info.genres = getInfoList(/genres/i, "a");
+        info.alt_names = getInfoList(/alt/i, "li");
+        
+        info.id = url ? getMangaID(url) : "";
+        
+        var $img = $js("div.col-sm-3 img", doc);
+        info.img_src = $img ? $img.src : "";
+        /*
+        info.type = getInfoColumn("Type:", "Unknown");
+        */
+        return info;
+    },
+}; minfo.init();
+function mangaListing($el) {
+    this.build = function(info, $el) {
+        var $div = $js.el("div", {class: "mangalistingmo"});
+        var $des = $js.el("span", {innerHTML: info.description});
+        var $img = $js.el("img", {src: info.img_src, alt:info.title});
+        $img.style['float'] = "right";
+        $img.style['max-width'] = "300px";
+        $div.appendChild($img);
+        $div.appendChild($des);
+        $el.appendChild($div);
+        $el.addEventListener("mouseover", function(e) {
+            if (mangaListing.mo) {$js(".mangalistingmo", this).style['display'] = "block";}
+        });
+        $el.addEventListener("mouseout", function(e) {$js(".mangalistingmo", this).style['display'] = "none";});
+    };
+
+    // Add a mouseover display for manga listings
+    var $a = $js("a", $el);
+    if ($a.hasAttribute("data-chapter-id")) {return;}
+    var href = $a.href;
+    var id = getMangaID(href);
+    var info = minfo.getInfo(id);
+    if (info) {
+        return this.build(info, $el);
+    }
+    var req = new XMLHttpRequest();
+    req.open("GET", href);
+    req._this = this;
+    req.el = $el;
+    req.responseType = "document";
+    req.onload = function(dom) {
+        var $dom = this.response;
+        var info = minfo.parse($dom, this.responseURL);
+        minfo.saveInfo(info.id, info);
+        this._this.build(info, this.el);
+    };
+    req.send();
+}
+mangaListing.init = function(frontpage=false) {
+    // TODO convert to object style
+    if (frontpage) {
+        return $js.addStyle(".mangalistingmo { \
+            display: none; \
+            position: absolute; \
+            max-width: 600px; \
+            background: white; \
+            border: 1px solid grey; \
+            padding: 5px; \
+            overflow: auto; \
+            margin-top: -200px; \
+            margin-left: -660px;\
+        }");
+    }
+    $js.addStyle(".mangalistingmo { \
+        display: none; \
+        left: 0px; \
+        position: absolute; \
+        max-width: 600px; \
+        background: #272b30; \
+        border: 1px solid grey; \
+        padding: 5px; \
+        overflow: auto; \
+        margin-top: 45px; \
+        margin-left: 300px;\
+    }");
+};
+mangaListing.mo = true;
+
 function re_results(re, str) {
     // returns an array containing every match object for the regex in str
     var results = []; var result;
@@ -353,7 +503,42 @@ function getSuggestedDownload($div, $img, title) {
     req.send();
 }
 function follows_page() {
+    console.log({msg:"Follows page"});
+    mangaListing.init();
+    var $lis = $$js("#chapters table tbody tr");
+    for (var i = 0; i < $lis.length; ++i) {
+        mangaListing($lis[i]);
+    }
     
+    var $header = $js("ul.nav-tabs");
+    var $li = $js.el("li", {class: "pull-right", role: "presentation"});
+    var $checkbox = $js.el("input", {id: "MP_manga_mo", type: "checkbox", checked: mangaListing.mo});
+    var $label = $js.el("label", {innerHTML: "Mouseover Preview", style: "margin-left: 5px;"});
+    $label.setAttribute("for", "MP_manga_mo");
+    $checkbox.onclick = function() {mangaListing.mo = this.checked;};
+    $li.appendChild($checkbox);
+    $li.appendChild($label);
+    $header.appendChild($li);   
+}
+function search_page() {
+    console.log({msg:"Search page"});
+    mangaListing.init();
+    var $lis = $$js("#content div.table-responsive table tbody tr");
+    for (var i = 0; i < $lis.length; ++i) {
+        mangaListing($lis[i]);
+    }
+}
+
+function getMangaID(url) {
+    return /\/manga\/([\d]+)\//.exec(url)[1];
+}
+/* As in actual manga info page */
+function manga_page() {
+    var id = getMangaID(window.location.pathname);
+    var info = minfo.parse(document);
+    minfo.saveInfo(id, info);
+    console.log({msg:"Parsed Manga Page", id:id, info:info});
+     
 }
 
 function comic_page() {
@@ -365,6 +550,14 @@ function comic_page() {
         }
         window.prev_chapter = function() {
             var $prev = $js("#prev_chapter_alt");
+            $prev && $prev.click();
+        }
+        window.next_page = function() {
+            var $next = $js(".next_page_alt");
+            $next && $next.click();
+        }
+        window.prev_page = function() {
+            var $prev = $js(".prev_page_alt");
             $prev && $prev.click();
         }
         document.body.addEventListener("keydown", myKeyHandler);
@@ -403,4 +596,13 @@ function comic_page() {
 }
 if (/\/chapter\//.test(window.location.pathname)) {
     comic_page();
+}
+if (/\/manga\//.test(window.location.pathname)) {
+    manga_page();
+}
+if (/\/follows/.test(window.location.pathname)) {
+    follows_page();
+}
+if ("/" == window.location.pathname && /page\=search/.test(window.location.href)) {
+    search_page();
 }
