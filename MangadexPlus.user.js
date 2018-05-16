@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.1
+// @version        1.2
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -447,7 +447,16 @@ function mangaListing($el) {
 
         $el.appendChild($div);
         $el.addEventListener("mouseover", function(e) {
-            if (mangaListing.mo) {$js(".mangalistingmo", this).style['display'] = "block";}
+            if (mangaListing.mo) {
+                var $mo = $js(".mangalistingmo", this);
+                $mo.style['display'] = "block";
+                var pos = $mo.getBoundingClientRect();
+                console.log({msg:"pos", pos:pos, footer:$js("footer").getBoundingClientRect()});
+                if (pos.bottom > $js("footer").getBoundingClientRect().top) {
+                    console.log({msg:"bigger!", top: -(pos.height + 15)});
+                    $mo.style["margin-top"] = -(pos.height + 15) + "px";
+                }
+            }
         });
         $el.addEventListener("mouseout", function(e) {$js(".mangalistingmo", this).style['display'] = "none";});
     };
@@ -518,7 +527,7 @@ mangaListing.init = function(frontpage=false) {
     }
     $js.addStyle(".mangalistingmo { \
         display: none; \
-        left: 0px; \
+        left: 300px; \
         position: absolute; \
         max-width: 600px; \
         background: #272b30; \
@@ -527,6 +536,7 @@ mangaListing.init = function(frontpage=false) {
         overflow: auto; \
         margin-top: 45px; \
         margin-left: 300px;\
+        z-index: 5;\
     } \
     .mangalistingmo td { \
         padding-left: 5px; \
