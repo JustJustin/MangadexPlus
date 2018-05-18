@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.0
+// @version        1.2
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -375,6 +375,66 @@ var minfo = {
         return info;
     },
 }; minfo.init();
+var chinfo = {
+    cacheKey: "chInfo",
+    interval: 24 * 60 * 60, // interval in seconds (24 hours)
+    init: function() {
+        if (!(this.cacheKey in window.localStorage)) {
+            window.localStorage[this.cacheKey] = JSON.stringify({});
+        }
+    },
+    getCache: function() {
+        return JSON.parse(window.localStorage[this.cacheKey]);
+    },
+    getFromCache: function(id) {
+        var cache = this.getCache();
+        if ((id in cache) && this.checkInterval(cache[id].lastupdate)) {
+            return cache[id].chapters;
+        }
+        return false;
+    },
+    getChapters: function(id, cb) {
+        var cached = this.getFromCache(id);
+        if (cached) { console.log({msg:"Using saved chapters", id:id, chapters:cached}); return cb(cached); }
+        this.fetch(id, cb);
+    },
+    saveChapters: function(id, chapters) {
+        var cache = this.getCache();
+        cache[id] = {chapters: chapters, lastupdate: new Date().toJSON()};
+        window.localStorage[this.cacheKey] = JSON.stringify(cache);
+    },
+    checkInterval: function(lastupdate) {
+        lastupdate = new Date(lastupdate);
+        var elapsed = (new Date() - lastupdate) / 1000;
+        return elapsed <= this.interval; // return true if we haven't expired this entry
+    },
+    fetch: function(id, cb) {
+        var url = "/manga/" + id;
+        var req = new XMLHttpRequest();
+        req.open("GET", url);
+        req.responseType = "document";
+        req._this = this; req.id = id; req.cb = cb;
+        req.send();
+        req.onload = function() {
+            var $dom = this.response;
+            var chapters = this._this.parse($dom);
+            this._this.saveChapters(this.id, chapters);
+            this.cb(chapters);
+        };
+    },
+    parse: function(dom) {
+        var $chapters = $$js("#content div.table-responsive table tbody tr", dom);
+        if (!$chapters) { return; }
+        $chapters = Array.from($chapters).slice(0,3); // first 3 chapters
+        for (var i = 0; i < $chapters.length; ++i) {
+            var info = function($tr) {
+                return {read: !!$js("span.chapter_mark_unread_button", $tr), title: $tr.children[1].textContent, date: $js("time", $tr).textContent, group: $tr.children[4].textContent};
+            } ($chapters[i]);
+            $chapters[i] = info;
+        }
+        return $chapters;
+    },
+}; chinfo.init();
 function mangaListing($el) {
     this.build = function(info, $el) {
         var $div = $js.el("div", {class: "mangalistingmo"});
@@ -384,11 +444,41 @@ function mangaListing($el) {
         $img.style['max-width'] = "300px";
         $div.appendChild($img);
         $div.appendChild($des);
+
         $el.appendChild($div);
         $el.addEventListener("mouseover", function(e) {
-            if (mangaListing.mo) {$js(".mangalistingmo", this).style['display'] = "block";}
+            if (mangaListing.mo) {
+                var $mo = $js(".mangalistingmo", this);
+                $mo.style['display'] = "block";
+                var pos = $mo.getBoundingClientRect();
+                console.log({msg:"pos", pos:pos, footer:$js("footer").getBoundingClientRect()});
+                if (pos.bottom > $js("footer").getBoundingClientRect().top) {
+                    console.log({msg:"bigger!", top: -(pos.height + 15)});
+                    $mo.style["margin-top"] = -(pos.height + 15) + "px";
+                }
+            }
         });
         $el.addEventListener("mouseout", function(e) {$js(".mangalistingmo", this).style['display'] = "none";});
+    };
+    this.buildChapters = function(chapters, $el) {
+        var $div = $js("div.mangalistingmo", $el);
+        if (chapters) {
+            var $table = $js.el("table", {style: "clear: both;"});
+            for (var i = 0; i < chapters.length; ++i) {
+                var $tr = $js.el("tr");
+                var $eye = $js.el("td");
+                if (chapters[i].read) { 
+                    $eye.appendChild($js.el("span", {class: "fas fa-eye", 'aria-hidden': true, innerHTML: " "}) );
+                } else { $eye.innerHTML = " "; }
+
+                $tr.appendChild($eye);
+                $tr.appendChild($js.el("td", {innerHTML: chapters[i].title}));
+                $tr.appendChild($js.el("td", {innerHTML: chapters[i].group}));
+                $tr.appendChild($js.el("td", {innerHTML: chapters[i].date}));
+                $table.appendChild($tr);
+            }
+            $div.appendChild($table);
+        }
     };
 
     // Add a mouseover display for manga listings
@@ -398,7 +488,10 @@ function mangaListing($el) {
     var id = getMangaID(href);
     var info = minfo.getInfo(id);
     if (info) {
-        return this.build(info, $el);
+        console.log({msg:"Using saved info", id:info.id, info:info});
+        this.build(info, $el);
+        var _this = this;
+        return chinfo.getChapters(id, function(chapters) {_this.buildChapters(chapters, $el);});
     }
     var req = new XMLHttpRequest();
     req.open("GET", href);
@@ -409,8 +502,12 @@ function mangaListing($el) {
         var $dom = this.response;
         var info = minfo.parse($dom, this.responseURL);
         minfo.saveInfo(info.id, info);
+        var chapters = chinfo.parse($dom);
+        chinfo.saveChapters(info.id, chapters);
         this._this.build(info, this.el);
+        this._this.buildChapters(chapters, this.el);
     };
+    
     req.send();
 }
 mangaListing.init = function(frontpage=false) {
@@ -430,7 +527,7 @@ mangaListing.init = function(frontpage=false) {
     }
     $js.addStyle(".mangalistingmo { \
         display: none; \
-        left: 0px; \
+        left: 300px; \
         position: absolute; \
         max-width: 600px; \
         background: #272b30; \
@@ -439,6 +536,11 @@ mangaListing.init = function(frontpage=false) {
         overflow: auto; \
         margin-top: 45px; \
         margin-left: 300px;\
+        z-index: 5;\
+    } \
+    .mangalistingmo td { \
+        padding-left: 5px; \
+        padding-right: 5px; \
     }");
 };
 mangaListing.mo = true;
@@ -541,7 +643,10 @@ function manga_page() {
     var info = minfo.parse(document);
     minfo.saveInfo(id, info);
     console.log({msg:"Parsed Manga Page", id:id, info:info});
-     
+
+    var chapters = chinfo.parse(document);
+    chinfo.saveChapters(id, chapters);
+    console.log({msg: "cont.", chapters:chapters});
 }
 
 function comic_page() {
