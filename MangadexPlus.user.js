@@ -459,6 +459,9 @@ function getch(name) {
     if (res) {
         return res[3];
     }
+    if (/oneshot/i.test(name)) {
+        return "1";
+    }
     // fall back, just find a number
     var re = /[\d]+(\.[\d]+(\.[\d]+)?)?/gi;
     var res = re_results(re, name);
