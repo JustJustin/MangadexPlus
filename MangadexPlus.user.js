@@ -568,6 +568,9 @@ function getch(name) {
     if (res) {
         return res[3];
     }
+    if (/oneshot/i.test(name)) {
+        return "1";
+    }
     // fall back, just find a number
     var re = /[\d]+(\.[\d]+(\.[\d]+)?)?/gi;
     var res = re_results(re, name);
@@ -640,7 +643,7 @@ function follows_page() {
     for (var i = 0; i < $lis.length; ++i) {
         mangaListing($lis[i]);
     }
-    
+    $js.addStyle("span.visible-lg-inline {display: none !important;}");
     var $header = $js("ul.nav-tabs");
     var $li = $js.el("li", {class: "pull-right", role: "presentation"});
     var $checkbox = $js.el("input", {id: "MP_manga_mo", type: "checkbox", checked: mangaListing.mo});
