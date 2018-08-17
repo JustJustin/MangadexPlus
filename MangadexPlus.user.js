@@ -201,7 +201,7 @@ var myKeyUp = function(e) {
 
 var config = {
     settingsKey: "MDPconfig",
-    settings: {ajaxfix: false},
+    settings: {ajaxfix: false, ajaxswitch: true},
     current: null,
     pages: {},
     init: function() {
@@ -290,6 +290,13 @@ var config = {
         var $lbl = $js.el("label", {innerHTML: "Use AJAX fix for new firefox"});
         $lbl.setAttribute("for", "MDPajaxfix");
         $box.onclick = function () {config.settings.ajaxfix = this.checked; config.save();}
+        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+
+        var $span = $js.el("span");
+        var $box = $js.el("input", {id:"MDPajaxswitch", type:"checkbox", checked: this.settings.ajaxswitch});
+        var $lbl = $js.el("label", {innerHTML: "Switch ajax type if first attempt fails"});
+        $lbl.setAttribute("for", "MDPajaxswitch");
+        $box.onclick = function () {config.settings.ajaxswitch = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
     },
     save: function() {
@@ -586,7 +593,7 @@ function getSuggestedDownload($div, $img, title) {
     var req = new XMLHttpRequest();
     var imgsrc = (config.settings.ajaxfix ? $img.src : "//cors-anywhere.herokuapp.com/" + $img.src);
     req.open("GET", imgsrc);
-    $js.extend(req, {title: title, span: $span, 
+    $js.extend(req, {title: title, span: $span, img: $img,
                      type: $img.src.split(".").pop()});
     req.responseType = "arraybuffer";
     req.onload = function(event) {
@@ -601,6 +608,28 @@ function getSuggestedDownload($div, $img, title) {
     };
     req.onerror = function(event) {
         console.log({msg: "Error getting download resource", req: req, event: event});
+        if (!config.settings.ajaxswitch) {return;}
+
+        var req2 = new XMLHttpRequest();
+        var imgsrc = (!config.settings.ajaxfix ? this.img.src : "//cors-anywhere.herokuapp.com/" + this.img.src);
+        req2.open("GET", imgsrc);
+        $js.extend(req2, {title: this.title, span: this.span, img: this.img,
+                          type: this.type});
+        req2.responseType = "arraybuffer";
+        req2.onload = function(event) {
+            console.log({msg: "Got download resource", req: req2, event: event});
+            var data = new Blob([this.response], 
+                                {type:"image/" + (this.type == "jpg" ? "jpeg" : this.type)});
+            var $a = $js.el("a", {href: window.URL.createObjectURL(data), 
+                                  download: this.title + "." + this.type,
+                                  innerHTML: this.title});
+            this.span.appendChild($a);
+            this.span.appendChild($js.el("br"));
+        };
+        req2.onerror = function(event) {
+            console.log({msg: "Error getting download resource from error handler", req: req2, event: event});
+        };
+        req2.send();
     };
     req.send();
 }
