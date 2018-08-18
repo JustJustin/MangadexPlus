@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2
+// @version        1.2.1
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -136,6 +136,15 @@ $js.extend($js, {
     },
 }); $js._keycode_init();
 
+var debug = {
+    default: false,
+    log: function() {
+        if (this.default || config && config.debug) {
+            console.log.apply(console, arguments);
+        } 
+    }
+};
+
 var keyTimeout = null;
 var scrollInterval = null;
 var myKeyHandler = function(e){
@@ -201,7 +210,7 @@ var myKeyUp = function(e) {
 
 var config = {
     settingsKey: "MDPconfig",
-    settings: {ajaxfix: false, ajaxswitch: true},
+    settings: {ajaxfix: false, ajaxswitch: true, debug: false},
     current: null,
     pages: {},
     init: function() {
@@ -246,7 +255,7 @@ var config = {
         }\
         .MDPconfighead .MDPconfigclose { float: right; max-height: 20px; cursor: pointer; }\
         .MDPconfignub:hover { opacity: 1; cursor: pointer; }\
-        .MDPconfigpage>span { margin-left: 5px; margin-right: 5px; }\
+        .MDPconfigpage>span { display: inline-block; margin-left: 5px; margin-right: 5px; }\
         .MDPconfigpage label { margin-left: 5px; font-weight: normal !important;  }\
         .MDPconfigtab {font-weight: bold; }");
         var $nub = $js.el("div", {class: "MDPconfignub", innerHTML: "{+}"});
@@ -298,12 +307,21 @@ var config = {
         $lbl.setAttribute("for", "MDPajaxswitch");
         $box.onclick = function () {config.settings.ajaxswitch = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+
+        var $span = $js.el("span");
+        var $box = $js.el("input", {id:"MDPdebug", type:"checkbox", checked: this.settings.debug});
+        var $lbl = $js.el("label", {innerHTML: "Enable additional debug output"});
+        $lbl.setAttribute("for", "MDPdebug");
+        $box.onclick = function () {config.settings.debug = this.checked; config.save();}
+        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+
     },
     save: function() {
         window.localStorage[this.settingsKey] = JSON.stringify(this.settings);
     }
 };
 config.init();
+
 
 var minfo = {
     cacheKey: "mangaInfo",
@@ -336,7 +354,7 @@ var minfo = {
     },
     parse: function(doc, url=undefined) {
         var getInfoColumn = function(infoLabel, init=undefined, clean = true) {
-            $trs = $$js("div.col-sm-9 table tr", doc);
+            $trs = $$js("div.card-body div.row div.row", doc);
             for (var i = 0 ; i < $trs.length; ++i) {
                 var $tr = $trs[i];
                 if (infoLabel.test($tr.children[0].innerHTML)) {
@@ -347,7 +365,7 @@ var minfo = {
             return init;
         };
         var getInfoList = function(infoLabel, eltype, init=[]) {
-            $trs = $$js("div.col-sm-9 table tr", doc);
+            $trs = $$js("div.card-body div.row div.row", doc);
             for (var i = 0 ; i < $trs.length; ++i) {
                 var $tr = $trs[i];
                 if (infoLabel.test($tr.children[0].innerHTML)) {
@@ -363,7 +381,7 @@ var minfo = {
             return init;
         };
         var info = {}; 
-        info.title = $js("h3.panel-title", doc).innerText.trim();
+        info.title = $js("h6.card-header", doc).innerText.trim();
         info.status = getInfoColumn(/status/i, "Unknown");
         info.description = getInfoColumn(/description/i, "Unknown", false);
         info.author = getInfoColumn(/author/i, "Unknown");
@@ -374,7 +392,7 @@ var minfo = {
         
         info.id = url ? getMangaID(url) : "";
         
-        var $img = $js("div.col-sm-3 img", doc);
+        var $img = $js("div.card-body img", doc);
         info.img_src = $img ? $img.src : "";
         /*
         info.type = getInfoColumn("Type:", "Unknown");
@@ -430,12 +448,18 @@ var chinfo = {
         };
     },
     parse: function(dom) {
-        var $chapters = $$js("#content div.table-responsive table tbody tr", dom);
+        debug.log({msg:"Parsing Chapters", page: dom});
+        var $chapters = $$js("#content div.chapter-container div.chapter-row", dom);
         if (!$chapters) { return; }
-        $chapters = Array.from($chapters).slice(0,3); // first 3 chapters
+        $chapters = Array.from($chapters).slice(1,4); // first 3 chapters
         for (var i = 0; i < $chapters.length; ++i) {
+            debug.log({msg: " Parsing Chapter", chapter: $chapters[i]});
             var info = function($tr) {
-                return {read: !!$js("span.chapter_mark_unread_button", $tr), title: $tr.children[1].textContent, date: $js("time", $tr).textContent, group: $tr.children[4].textContent};
+                var $title = $tr.children[1].children[0];
+                return {read: !!$js("span.chapter_mark_unread_button", $tr), 
+                        title: $title.children[0].textContent.trim() + " " + $title.children[1].textContent.trim(), 
+                        date: $tr.children[3].textContent.trim(), 
+                        group: $js("div.chapter-list-group", $tr).textContent.trim()};
             } ($chapters[i]);
             $chapters[i] = info;
         }
