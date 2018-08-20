@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.1
+// @version        1.2.2
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -139,7 +139,7 @@ $js.extend($js, {
 var debug = {
     default: false,
     log: function() {
-        if (this.default || config && config.debug) {
+        if (this.default || config && config.settings.debug) {
             console.log.apply(console, arguments);
         } 
     }
@@ -257,7 +257,8 @@ var config = {
         .MDPconfignub:hover { opacity: 1; cursor: pointer; }\
         .MDPconfigpage>span { display: inline-block; margin-left: 5px; margin-right: 5px; }\
         .MDPconfigpage label { margin-left: 5px; font-weight: normal !important;  }\
-        .MDPconfigtab {font-weight: bold; }");
+        .MDPconfigtab {font-weight: bold; cursor: pointer; margin-left: 5px; }\
+        .MDPconfigtabsel {color: black;} ");
         var $nub = $js.el("div", {class: "MDPconfignub", innerHTML: "{+}"});
         var $box = $js.el("div", {class: "MDPconfig"});
         $nub.addEventListener("click", function () {
@@ -279,19 +280,31 @@ var config = {
     createPage: function(page) {
         var $conf = $js("MDPconfig");
         var $tab = $js.el("span", {class: "MDPconfigtab", innerHTML: page});
-        var $page = $js.el("div", {class: "MDPconfigpage"});
-        
+        var $page = $js.el("div", {class: "MDPconfigpage", tab: $tab});
+        $tab.page = $page;
+
         if (Object.keys(this.pages).length == 0) {
             $page.style.display="block";
             $js.addClass($tab, "MDPconfigtabsel");
             this.current = $page;
         }
+        $tab.addEventListener("click", function() {
+            var $page = config.pages[this.innerHTML];
+            var $curr = config.current;
+            if ($page.style.display != "block") {
+                $curr.style.display = "none";
+                $page.style.display = "block";
+                $curr.tab.classList.remove("MDPconfigtabsel");
+                $page.tab.classList.add("MDPconfigtabsel");
+                config.current = $page;
+            }
+        });
         this.pages[page] = $page;
         this.$box.appendChild($page);
         this.$head.appendChild($tab);
         return $page;
     },
-    main: function() { // creates main settings page
+    main: function() { // creates main settings pages
         var $main = this.createPage("Main");
 
         var $span = $js.el("span");
@@ -308,12 +321,14 @@ var config = {
         $box.onclick = function () {config.settings.ajaxswitch = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
 
+        var $debug = this.createPage("Debug");
+
         var $span = $js.el("span");
         var $box = $js.el("input", {id:"MDPdebug", type:"checkbox", checked: this.settings.debug});
         var $lbl = $js.el("label", {innerHTML: "Enable additional debug output"});
         $lbl.setAttribute("for", "MDPdebug");
         $box.onclick = function () {config.settings.debug = this.checked; config.save();}
-        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+        $span.appendChild($box); $span.appendChild($lbl); $debug.appendChild($span);
 
     },
     save: function() {
@@ -457,7 +472,7 @@ var chinfo = {
             var info = function($tr) {
                 var $title = $tr.children[1].children[0];
                 return {read: !!$js("span.chapter_mark_unread_button", $tr), 
-                        title: $title.children[0].textContent.trim() + " " + $title.children[1].textContent.trim(), 
+                        title: $title.children.length ? $title.children[0].textContent.trim() + " " + $title.children[1].textContent.trim() : $title.textContent.trim(), 
                         date: $tr.children[3].textContent.trim(), 
                         group: $js("div.chapter-list-group", $tr).textContent.trim()};
             } ($chapters[i]);
@@ -473,6 +488,15 @@ function mangaListing($el) {
         var $img = $js.el("img", {src: info.img_src, alt:info.title});
         $img.style['float'] = "right";
         $img.style['max-width'] = "300px";
+        $img.onerror = function() {
+            debug.log({msg:"Chapter Image failed to load", img:this, title:this.title});
+            if (/\.jpg/.test(this.src)) {
+                this.src = this.src.replace(/\.jpg/, ".jpeg");
+            } else {
+                this.src = this.src.replace(/\.jpeg/, ".jpg");
+            }
+            this.onerror = undefined;
+        };
         $div.appendChild($img);
         $div.appendChild($des);
 
@@ -513,8 +537,8 @@ function mangaListing($el) {
     };
 
     // Add a mouseover display for manga listings
-    var $a = $js("a", $el);
-    if ($a.hasAttribute("data-chapter-id")) {return;}
+    var $a = $js("a", $el.children[0]);
+    if (!$a) {return;}
     var href = $a.href;
     var id = getMangaID(href);
     var info = minfo.getInfo(id);
@@ -663,8 +687,8 @@ function getSuggestedDownload($div, $img, title) {
 function follows_page() {
     console.log({msg:"Follows page"});
     mangaListing.init();
-    var $lis = $$js("#chapters table tbody tr");
-    for (var i = 0; i < $lis.length; ++i) {
+    var $lis = $$js("#chapters div.chapter-container>div.row");
+    for (var i = 1; i < $lis.length; ++i) { // skip header
         mangaListing($lis[i]);
     }
     $js.addStyle("span.visible-lg-inline {display: none !important;}");
@@ -688,7 +712,8 @@ function search_page() {
 }
 
 function getMangaID(url) {
-    return /\/manga\/([\d]+)\//.exec(url)[1];
+    debug.log({msg:"getMangaID", url:url});
+    return /\/((manga)|(title))\/([\d]+)\//.exec(url).slice(-1);
 }
 /* As in actual manga info page */
 function manga_page() {
