@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.2
+// @version        1.2.3
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -628,7 +628,7 @@ function getch(name) {
 }
 
 function get_title() {
-    var $el = $js("#content h3.panel-title a");
+    var $el = $js("a.manga_title");
     if ($el) {
         return $el.innerHTML;
     }
@@ -728,6 +728,7 @@ function manga_page() {
 }
 
 function comic_page() {
+    console.log({msg: "Comic Page"});
     if (!window.key_handlers) {
         window.key_handlers = true;
         window.next_chapter = function() {
@@ -763,8 +764,8 @@ function comic_page() {
             ch = getch(ch);
             if (ch.length < 2) ch = "0"+ch;
             
-            var pg = $js("button", $js("#jump_page").parentNode);
-            pg = /[\d]+/.exec(pg.title)[0];
+            var pg = $js("#jump_page option[selected]").innerHTML.trim();
+            pg = /[\d]+/.exec(pg)[0];
             if (pg.length < 2) pg = "0"+pg;
             var pgtitle = title + "_c" + ch + "p" + pg;
             console.log("Recommended title is " + pgtitle);
@@ -779,6 +780,7 @@ function comic_page() {
     // install mutation observer
     var observer = new MutationObserver(this.update);
     observer.observe($js("#jump_page"), {attributes: true, childList: true});
+    this.update();
 }
 if (/\/chapter\//.test(window.location.pathname)) {
     comic_page();
