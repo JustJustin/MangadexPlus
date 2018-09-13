@@ -705,8 +705,8 @@ function follows_page() {
 function search_page() {
     console.log({msg:"Search page"});
     mangaListing.init();
-    var $lis = $$js("#content div.table-responsive table tbody tr");
-    for (var i = 0; i < $lis.length; ++i) {
+    var $lis = $$js("#content>div.row");
+    for (var i = 1; i < $lis.length; ++i) {
         mangaListing($lis[i]);
     }
 }
@@ -752,6 +752,7 @@ function comic_page() {
     }
     $js.addStyle("#mdp_recommended { margin-left: auto; margin-right: auto; margin-top:10px; "+
         "text-align: center; display: block; }");
+    var _this = this;
     this.update = function() {
         // Functionality that is triggered when page content is updated.
         var title = get_title();
@@ -761,13 +762,19 @@ function comic_page() {
             title = title.replace(/ /g, "-").replace(/[\':]/g, "");
             
             var ch = $js("#jump_chapter option[selected]").innerHTML.trim();
+            if (ch == "") {ch = "0";} // handle empty string
             ch = getch(ch);
             if (ch.length < 2) ch = "0"+ch;
             
-            var pg = $js("#jump_page option[selected]").innerHTML.trim();
+            var pg = $js("#jump_page").value.trim();
             pg = /[\d]+/.exec(pg)[0];
             if (pg.length < 2) pg = "0"+pg;
             var pgtitle = title + "_c" + ch + "p" + pg;
+            if (window.lastpage && window.lastpage == pg) {
+                setTimeout(_this.update, 250);
+                return;
+            }
+            window.lastpage = pg;
             console.log("Recommended title is " + pgtitle);
             
             var $div = $js("#mdp_recommended");
@@ -779,7 +786,8 @@ function comic_page() {
     };
     // install mutation observer
     var observer = new MutationObserver(this.update);
-    observer.observe($js("#jump_page"), {attributes: true, childList: true});
+    //observer.observe($js("#jump_page"), {attributes: true, childList: true, subtree: true});
+    observer.observe($js("div.images"), {attributes: true, childList: true, subtree: true});
     this.update();
 }
 if (/\/chapter\//.test(window.location.pathname)) {
