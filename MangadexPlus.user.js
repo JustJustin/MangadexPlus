@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.3
+// @version        1.2.4
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -210,7 +210,7 @@ var myKeyUp = function(e) {
 
 var config = {
     settingsKey: "MDPconfig",
-    settings: {ajaxfix: false, ajaxswitch: true, debug: false},
+    settings: {ajaxfix: false, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true},
     current: null,
     pages: {},
     init: function() {
@@ -220,6 +220,10 @@ var config = {
         // do configuration
         this.buildSettingsDialog();
         this.main();
+        // apply exportlib
+        if (this.settings.exportlib) {
+            this.exportlib();
+        }
     },
     buildSettingsDialog: function() {
         $js.addStyle(".MDPconfig {\
@@ -321,6 +325,13 @@ var config = {
         $box.onclick = function () {config.settings.ajaxswitch = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
 
+        var $span = $js.el("span");
+        var $box = $js.el("input", {id:"MDPwindowpos", type:"checkbox", checked: this.settings.windowbasedpos});
+        var $lbl = $js.el("label", {innerHTML: "Use Window based positioning for manga previews"});
+        $lbl.setAttribute("for", "MDPwindowpos");
+        $box.onclick = function () {config.settings.windowbasedpos = this.checked; config.save();}
+        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+
         var $debug = this.createPage("Debug");
 
         var $span = $js.el("span");
@@ -330,13 +341,26 @@ var config = {
         $box.onclick = function () {config.settings.debug = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $debug.appendChild($span);
 
+        var $span = $js.el("span");
+        var $box = $js.el("input", {id:"MDPexportlib", type:"checkbox", checked: this.settings.exportlib});
+        var $lbl = $js.el("label", {innerHTML: "Export $js library to window for debugging"});
+        $lbl.setAttribute("for", "MDPexportlib");
+        $box.onclick = function () {
+            config.settings.exportlib = this.checked; config.save();
+            if (this.checked && !window.$js) { config.exportlib(); }
+        }
+        $span.appendChild($box); $span.appendChild($lbl); $debug.appendChild($span);
     },
     save: function() {
         window.localStorage[this.settingsKey] = JSON.stringify(this.settings);
+    },
+    exportlib: function() { // Exports $js to main window for debugging purposes
+        window.$js = $js;
+        window.$$js = $$js;
+        //window.$js
     }
 };
 config.init();
-
 
 var minfo = {
     cacheKey: "mangaInfo",
@@ -506,14 +530,21 @@ function mangaListing($el) {
                 var $mo = $js(".mangalistingmo", this);
                 $mo.style['display'] = "block";
                 var pos = $mo.getBoundingClientRect();
-                console.log({msg:"pos", pos:pos, footer:$js("footer").getBoundingClientRect()});
-                if (pos.bottom > $js("footer").getBoundingClientRect().top) {
-                    console.log({msg:"bigger!", top: -(pos.height + 15)});
-                    $mo.style["margin-top"] = -(pos.height + 15) + "px";
+                if (config.settings.windowbasedpos) {
+                    if (pos.bottom > window.innerHeight) {
+                        newpos = 45 - ((pos.bottom - window.innerHeight) + 20);
+                        $mo.style["margin-top"] = newpos + "px";
+                    }
+                } else {
+                    console.log({msg:"pos", pos:pos, footer:$js("footer").getBoundingClientRect()});
+                    if (pos.bottom > $js("footer").getBoundingClientRect().top) {
+                        console.log({msg:"bigger!", top: -(pos.height + 15)});
+                        $mo.style["margin-top"] = -(pos.height + 15) + "px";
+                    }
                 }
             }
         });
-        $el.addEventListener("mouseout", function(e) {$js(".mangalistingmo", this).style['display'] = "none";});
+        $el.addEventListener("mouseout", function(e) {$js(".mangalistingmo", this).removeAttribute("style");});
     };
     this.buildChapters = function(chapters, $el) {
         var $div = $js("div.mangalistingmo", $el);
