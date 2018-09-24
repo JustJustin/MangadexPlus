@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.4
+// @version        1.2.5
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -392,6 +392,7 @@ var minfo = {
         return false;
     },
     parse: function(doc, url=undefined) {
+        debug.log({msg:"Parsing manga", dom: doc, url: url});
         var getInfoColumn = function(infoLabel, init=undefined, clean = true) {
             $trs = $$js("div.card-body div.row div.row", doc);
             for (var i = 0 ; i < $trs.length; ++i) {
@@ -441,7 +442,7 @@ var minfo = {
 }; minfo.init();
 var chinfo = {
     cacheKey: "chInfo",
-    interval: 24 * 60 * 60, // interval in seconds (24 hours)
+    interval: 24 * 60 * 60 * 7, // interval in seconds (24 hours * 7 = 1 week)
     init: function() {
         if (!(this.cacheKey in window.localStorage)) {
             window.localStorage[this.cacheKey] = JSON.stringify({});
@@ -506,33 +507,51 @@ var chinfo = {
     },
 }; chinfo.init();
 function mangaListing($el) {
+    var _this = this;
     this.build = function(info, $el) {
+        if ($js(".mangalistingmo", $el)) {
+            // already exists, just updated img
+            var $img = $js(".mangalistingmo img", $el);
+            $img.src = info.img_src;
+            return;
+        }
+        $el.info = info;
         var $div = $js.el("div", {class: "mangalistingmo"});
         var $des = $js.el("span", {innerHTML: info.description});
         var $img = $js.el("img", {src: info.img_src, alt:info.title});
         $img.style['float'] = "right";
         $img.style['max-width'] = "300px";
         $img.onerror = function() {
-            debug.log({msg:"Chapter Image failed to load", img:this, title:this.title});
-            if (/\.jpg/.test(this.src)) {
-                this.src = this.src.replace(/\.jpg/, ".jpeg");
-            } else {
-                this.src = this.src.replace(/\.jpeg/, ".jpg");
-            }
-            this.onerror = undefined;
+            var $el = this.parentNode.parentNode;
+            debug.log({msg:"Chapter Image failed to load", img:this, title: this.alt});
+            if ($el.requested) {return;}
+            _this.fetch(_this.href($el), $el); // update
         };
         $div.appendChild($img);
         $div.appendChild($des);
 
         $el.appendChild($div);
         $el.addEventListener("mouseover", function(e) {
+            var $el = this;
+            var info = $el.info;
             if (mangaListing.mo) {
+                if (!$el.chapters) {
+                    var chapters = chinfo.getFromCache(info.id);
+                    if ((!chapters || chapters.length == 0) && !$el.requested) {
+                        _this.fetch(_this.href($el), $el);
+                    } else if(chapters) {
+                        debug.log({msg: "Using Saved Chapters", title: info.title, chapters:chapters});
+                        _this.buildChapters(chapters, $el);
+                    } else {  // request already sent or no response, just stop checking
+                        $el.chapters = true;
+                    }
+                }
                 var $mo = $js(".mangalistingmo", this);
                 $mo.style['display'] = "block";
                 var pos = $mo.getBoundingClientRect();
                 if (config.settings.windowbasedpos) {
                     if (pos.bottom > window.innerHeight) {
-                        newpos = 45 - ((pos.bottom - window.innerHeight) + 20);
+                        newpos = 45 - ((pos.bottom - window.innerHeight) + 50);
                         $mo.style["margin-top"] = newpos + "px";
                     }
                 } else {
@@ -547,6 +566,7 @@ function mangaListing($el) {
         $el.addEventListener("mouseout", function(e) {$js(".mangalistingmo", this).removeAttribute("style");});
     };
     this.buildChapters = function(chapters, $el) {
+        $el.chapters = true;
         var $div = $js("div.mangalistingmo", $el);
         if (chapters) {
             var $table = $js.el("table", {style: "clear: both;"});
@@ -567,34 +587,52 @@ function mangaListing($el) {
         }
     };
 
-    // Add a mouseover display for manga listings
-    var $a = $js("a", $el.children[0]);
-    if (!$a) {return;}
-    var href = $a.href;
+    // should only be called if no info is had, or error handler is called on the image, 
+    // or if we're updating chapters.
+    this.fetch = function(href, $el) {
+        $el.requested = true; // mark as having been fetch()ed 
+        var req = new XMLHttpRequest();
+        req.open("GET", href);
+        req.el = $el;
+        req.responseType = "document";
+        req.onload = function(dom) {
+            var $dom = this.response;
+            var info = minfo.parse($dom, this.responseURL);
+            minfo.saveInfo(info.id, info);
+            var chapters = chinfo.parse($dom);
+            chinfo.saveChapters(info.id, chapters);
+            _this.build(info, this.el);
+            _this.buildChapters(chapters, this.el);
+        }
+        req.onerror = function() {
+            if (this.status == 503) {
+                debug.log({msg:"503, todo:consider reattempting", req:this});
+            } else {
+                debug.log({msg: "Failed to request manga page", id: this.responseURL, req: this});
+            }
+        }
+        req.send(href, $el);
+    }
+    this.href = function($el) {
+        var $a = $js("a", $el.children[0]);
+        if (!$a) {return false;}
+        return $a.href;
+    }
+
+    // Get necessary info
+    var href = this.href($el);
+    if (!href) {return;}
     var id = getMangaID(href);
+
+    // Add a mouseover display for manga listings
     var info = minfo.getInfo(id);
     if (info) {
         console.log({msg:"Using saved info", id:info.id, info:info});
         this.build(info, $el);
-        var _this = this;
-        return chinfo.getChapters(id, function(chapters) {_this.buildChapters(chapters, $el);});
+        return;
+    } else {
+        this.fetch(href, $el);
     }
-    var req = new XMLHttpRequest();
-    req.open("GET", href);
-    req._this = this;
-    req.el = $el;
-    req.responseType = "document";
-    req.onload = function(dom) {
-        var $dom = this.response;
-        var info = minfo.parse($dom, this.responseURL);
-        minfo.saveInfo(info.id, info);
-        var chapters = chinfo.parse($dom);
-        chinfo.saveChapters(info.id, chapters);
-        this._this.build(info, this.el);
-        this._this.buildChapters(chapters, this.el);
-    };
-    
-    req.send();
 }
 mangaListing.init = function(frontpage=false) {
     // TODO convert to object style
@@ -613,7 +651,6 @@ mangaListing.init = function(frontpage=false) {
     }
     $js.addStyle(".mangalistingmo { \
         display: none; \
-        left: 300px; \
         position: absolute; \
         max-width: 600px; \
         background: #272b30; \
@@ -621,8 +658,9 @@ mangaListing.init = function(frontpage=false) {
         padding: 5px; \
         overflow: auto; \
         margin-top: 45px; \
-        margin-left: 300px;\
+        margin-right: 100px;\
         z-index: 5;\
+        right: 200px; \
     } \
     .mangalistingmo td { \
         padding-left: 5px; \
@@ -824,7 +862,8 @@ function comic_page() {
 if (/\/chapter\//.test(window.location.pathname)) {
     comic_page();
 }
-if (/\/manga\//.test(window.location.pathname)) {
+if (/\/manga\//.test(window.location.pathname) || 
+    /\/title\//.test(window.location.pathname) ) {
     manga_page();
 }
 if (/\/follows/.test(window.location.pathname)) {
