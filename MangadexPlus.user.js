@@ -442,7 +442,7 @@ var minfo = {
 }; minfo.init();
 var chinfo = {
     cacheKey: "chInfo",
-    interval: 24 * 60 * 60 * 7, // interval in seconds (24 hours * 7 = 1 week)
+    interval: 24 * 60 * 60, // interval in seconds (24 hours)
     init: function() {
         if (!(this.cacheKey in window.localStorage)) {
             window.localStorage[this.cacheKey] = JSON.stringify({});
