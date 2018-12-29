@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.5
+// @version        1.2.6
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -135,6 +135,10 @@ $js.extend($js, {
         charfill('a', 65, 26); charfill('0', 48, 10); this._keycode_init = function() {};
     },
 }); $js._keycode_init();
+
+var limiter = { // control ourselves...
+    // TODO: control ajax requests for manga info so we don't get temporarily denied
+};
 
 var debug = {
     default: false,
@@ -506,6 +510,7 @@ var chinfo = {
         return $chapters;
     },
 }; chinfo.init();
+
 function mangaListing($el) {
     var _this = this;
     this.build = function(info, $el) {
@@ -640,13 +645,15 @@ mangaListing.init = function(frontpage=false) {
         return $js.addStyle(".mangalistingmo { \
             display: none; \
             position: absolute; \
-            max-width: 600px; \
-            background: white; \
+            width: 600px; \
+            background: #272b30; \
             border: 1px solid grey; \
             padding: 5px; \
             overflow: auto; \
-            margin-top: -200px; \
-            margin-left: -660px;\
+            margin-top: 45px; \
+            margin-right: 100px;\
+            z-index: 5;\
+            right: 200px; \
         }");
     }
     $js.addStyle(".mangalistingmo { \
@@ -795,6 +802,18 @@ function manga_page() {
     chinfo.saveChapters(id, chapters);
     console.log({msg: "cont.", chapters:chapters});
 }
+function front_page() {
+    console.log({msg: "Front Page"});
+    mangaListing.init(true);
+    var $top_chapters = $$js("#six_hours li.list-group-item, #day li.list-group-item, #week li.list-group-item");
+    var $top_manga = $$js("#top_follows li.list-group-item, #top_rating li.list-group-item");
+    var $latest_updates = $$js("#latest_update div.col-md-6, #follows_update div.col-md-6");
+    var $all = [...$top_chapters, ...$top_manga, ...$latest_updates];
+    for (var i = 0; i < $all.length; ++i) {
+        mangaListing($all[i]);
+    }
+
+}   
 
 function comic_page() {
     console.log({msg: "Comic Page"});
@@ -858,6 +877,9 @@ function comic_page() {
     //observer.observe($js("#jump_page"), {attributes: true, childList: true, subtree: true});
     observer.observe($js("div.images"), {attributes: true, childList: true, subtree: true});
     this.update();
+}
+if ("/" == window.location.pathname && window.location.search == "" && window.location.hash == "") {
+    front_page();
 }
 if (/\/chapter\//.test(window.location.pathname)) {
     comic_page();
