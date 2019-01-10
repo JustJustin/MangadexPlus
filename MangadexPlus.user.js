@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.6
+// @version        1.2.7
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -455,9 +455,9 @@ var chinfo = {
     getCache: function() {
         return JSON.parse(window.localStorage[this.cacheKey]);
     },
-    getFromCache: function(id) {
+    getFromCache: function(id, ignore_interval=false) {
         var cache = this.getCache();
-        if ((id in cache) && this.checkInterval(cache[id].lastupdate)) {
+        if ( (id in cache) && (ignore_interval || this.checkInterval(cache[id].lastupdate)) ) {
             return cache[id].chapters;
         }
         return false;
@@ -467,9 +467,14 @@ var chinfo = {
         if (cached) { console.log({msg:"Using saved chapters", id:id, chapters:cached}); return cb(cached); }
         this.fetch(id, cb);
     },
-    saveChapters: function(id, chapters) {
+    getChID: function(href) {
+        var chreg = /chapter\/([\d]+)/;
+        var res = chreg.exec(href);
+        return res ? res[1] : false;
+    },
+    saveChapters: function(id, chapters, update=true) {
         var cache = this.getCache();
-        cache[id] = {chapters: chapters, lastupdate: new Date().toJSON()};
+        cache[id] = {chapters: chapters, lastupdate: update ? new Date().toJSON() : cache[id].lastupdate};
         window.localStorage[this.cacheKey] = JSON.stringify(cache);
     },
     checkInterval: function(lastupdate) {
@@ -502,6 +507,7 @@ var chinfo = {
                 var $title = $tr.children[1].children[0];
                 return {read: !!$js("span.chapter_mark_unread_button", $tr), 
                         title: $title.children.length ? $title.children[0].textContent.trim() + " " + $title.children[1].textContent.trim() : $title.textContent.trim(), 
+                        href: $js("a", $tr.children[1]).href,
                         date: $tr.children[3].textContent.trim(), 
                         group: $js("div.chapter-list-group", $tr).textContent.trim()};
             } ($chapters[i]);
@@ -877,6 +883,22 @@ function comic_page() {
     //observer.observe($js("#jump_page"), {attributes: true, childList: true, subtree: true});
     observer.observe($js("div.images"), {attributes: true, childList: true, subtree: true});
     this.update();
+
+    // update chapter info
+    var chid = chinfo.getChID(window.location.pathname);
+    if (chid) {
+        var id = getMangaID($js("a.manga_title").href);
+        var chapters = chinfo.getFromCache(id, true);
+        for (var i = 0; i < chapters.length; ++i) {
+            console.log(chid + " == " + chinfo.getChID(chapters[i].href));
+            if (chapters[i].href && (chinfo.getChID(chapters[i].href) == chid)) {
+                chapters[i].read = true;
+                console.log({msg:"Updating Ch read status", ch: chapters[i]});
+                chinfo.saveChapters(id, chapters, false);
+                break;
+            }
+        }
+    }
 }
 if ("/" == window.location.pathname && window.location.search == "" && window.location.hash == "") {
     front_page();
