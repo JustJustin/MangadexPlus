@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.7
+// @version        1.2.8
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -900,19 +900,35 @@ function comic_page() {
         }
     }
 }
+
+function generic_mangalisting_page() {
+    // Try to autodetect different styles for mangaListings
+    var $rows = $$js("div.chapter-container>div.row");
+    if ($rows) {
+        mangaListing.init();
+        var i = 0;
+        // check to see if first row is manga or a heading
+        if (!$$js("a", $rows[0])) {
+            i = 1;
+        }
+        for (; i < $rows.length; ++i) {
+            mangaListing($rows[i]);
+        }
+    }
+}
+
 if ("/" == window.location.pathname && window.location.search == "" && window.location.hash == "") {
     front_page();
-}
-if (/\/chapter\//.test(window.location.pathname)) {
+} else if (/\/chapter\//.test(window.location.pathname)) {
     comic_page();
-}
-if (/\/manga\//.test(window.location.pathname) || 
+} else if (/\/manga\//.test(window.location.pathname) || 
     /\/title\//.test(window.location.pathname) ) {
     manga_page();
-}
-if (/\/follows/.test(window.location.pathname)) {
+} else if (/\/follows/.test(window.location.pathname)) {
     follows_page();
-}
-if ("/" == window.location.pathname && /page\=search/.test(window.location.href)) {
+} else if ("/" == window.location.pathname && /page\=search/.test(window.location.href)) {
     search_page();
+} else {
+    // Try to work on all pages generically. 
+    generic_mangalisting_page();
 }
