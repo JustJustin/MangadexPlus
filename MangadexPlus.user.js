@@ -116,9 +116,22 @@ $js.extend($js, {
             base.appendChild(el);
         }
     },
+    cssToString: function(css) {
+        let cssstring = "";
+        for (let rule in css) {
+            cssstring += rule + " { \n";
+            for (let key in css[rule]) {
+                cssstring += "\t" + key + ": " + css[rule][key] + "; \n";
+            }
+            cssstring += "}\n";
+        }
+        return cssstring;
+    },
     addStyle: function(css) {
-        var style;
-        style = $js.el('style', {
+        if (typeof(css) === "object") {
+            css = $js.cssToString(css);
+        }
+        let style = $js.el('style', {
             textContent: css
         });
         document.head.appendChild(style);
@@ -545,6 +558,11 @@ function mangaListing($el) {
         $el.addEventListener("mouseover", function(e) {
             var $el = this;
             var info = $el.info;
+            if (e.ctrlKey) {
+                document.body.classList.add("togglemo");
+            } else {
+                document.body.classList.remove("togglemo");
+            }
             if (mangaListing.mo) {
                 if (!$el.chapters) {
                     var chapters = chinfo.getFromCache(info.id);
@@ -562,8 +580,12 @@ function mangaListing($el) {
                 var pos = $mo.getBoundingClientRect();
                 if (config.settings.windowbasedpos) {
                     if (pos.bottom > window.innerHeight) {
-                        newpos = 45 - ((pos.bottom - window.innerHeight) + 50);
+                        let newpos = 45 - ((pos.bottom - window.innerHeight) + 50);
                         $mo.style["margin-top"] = newpos + "px";
+                    }
+                    if (pos.left < 0) {
+                        let newpos = $mo.parentNode.getBoundingClientRect().width;
+                        $mo.style["left"] = newpos + "px";
                     }
                 } else {
                     console.log({msg:"pos", pos:pos, footer:$js("footer").getBoundingClientRect()});
@@ -598,20 +620,41 @@ function mangaListing($el) {
         }
     };
 
+    this.delay_fetch_handler = function() {
+        console.log({msg:"delayed_fetch triggered", el:this});
+        this.removeEventListener("mouseover", _this.delay_fetch_handler);
+        let $el = this;
+        let id = getMangaID(_this.href($el));
+        if (mangaListing.fetched[id]) { // use cached info
+            let info = mangaListing.fetched[id];
+            _this.build(info.info, $el);
+            _this.buildChapters(info.chapters, $el);
+        } else { // fetch
+            _this.fetch(_this.href($el), $el);
+        }
+    }
+
     // should only be called if no info is had, or error handler is called on the image, 
     // or if we're updating chapters.
-    this.fetch = function(href, $el) {
+    // delay_on_error, if set to true this will install a onhover handler for a delayed fetch.
+    // useful on initial load for letting entries we have no info on that error due to too many 
+    // requests be requested later.
+    this.fetch = function(href, $el, delay_on_error=false) {
         $el.requested = true; // mark as having been fetch()ed 
         var req = new XMLHttpRequest();
         req.open("GET", href);
         req.el = $el;
+        req.delay_on_err = delay_on_error;
         req.responseType = "document";
         req.onload = function(dom) {
+            debug.log({msg:"request loaded", url: this.responseURL, status: this.status, el:this.el});
+            if (this.status != 200) {return this.onerror();}
             var $dom = this.response;
             var info = minfo.parse($dom, this.responseURL);
             minfo.saveInfo(info.id, info);
             var chapters = chinfo.parse($dom);
             chinfo.saveChapters(info.id, chapters);
+            mangaListing.fetched[info.id] = {info: info, chapters: chapters};
             _this.build(info, this.el);
             _this.buildChapters(chapters, this.el);
         }
@@ -620,6 +663,10 @@ function mangaListing($el) {
                 debug.log({msg:"503, todo:consider reattempting", req:this});
             } else {
                 debug.log({msg: "Failed to request manga page", id: this.responseURL, req: this});
+            }
+            if (this.delay_on_err) {
+                debug.log({msg:"adding delayed handler", el: this.el});
+                this.el.addEventListener("mouseover", _this.delay_fetch_handler);
             }
         }
         req.send(href, $el);
@@ -642,43 +689,55 @@ function mangaListing($el) {
         this.build(info, $el);
         return;
     } else {
-        this.fetch(href, $el);
+        this.fetch(href, $el, true);
     }
 }
 mangaListing.init = function(frontpage=false) {
-    // TODO convert to object style
+    if (mangaListing.fetched !== undefined) {return;}
+    mangaListing.fetched = {};
+    window.addEventListener("keydown", function (e) {
+        if (e.shiftKey) {
+            document.body.classList.add("hidemo");
+        }
+        if (e.keyCode == 17 && e.shiftKey || e.ctrlKey && e.keyCode == 16) {
+            document.body.classList.add("togglemo");
+            $js("#MP_manga_mo").click();
+        }
+    }, {passive:true});
+    window.addEventListener("keyup", function (e) {
+        if (!e.shiftKey) {
+            document.body.classList.remove("hidemo");
+        }
+    }, {passive:true});
+
+    let style = {
+        ".mangalistingmo": {
+            display: "none",
+            position: "absolute",
+            "max-width": "600px",
+            background: "#272b30",
+            border: "1px solid grey",
+            padding: "5px",
+            overflow: "auto",
+            "margin-top": "45px",
+            "margin-right": "100px",
+            "z-index": "5",
+            right: "200px",
+        },
+        ".mangalistingmo td": {
+            "padding-left": "5px",
+            "padding-right": "5px",
+        },
+        ".hidemo .mangalistingmo, .togglemo .mangalistingmo": {
+            visibility: "hidden",
+        }
+    };
     if (frontpage) {
-        return $js.addStyle(".mangalistingmo { \
-            display: none; \
-            position: absolute; \
-            width: 600px; \
-            background: #272b30; \
-            border: 1px solid grey; \
-            padding: 5px; \
-            overflow: auto; \
-            margin-top: 45px; \
-            margin-right: 100px;\
-            z-index: 5;\
-            right: 200px; \
-        }");
+        delete style[".mangalistingmo"]["max-width"];
+        style[".mangalistingmo"]["width"] = "600px";
+        //delete style[".mangalistingmo td"]
     }
-    $js.addStyle(".mangalistingmo { \
-        display: none; \
-        position: absolute; \
-        max-width: 600px; \
-        background: #272b30; \
-        border: 1px solid grey; \
-        padding: 5px; \
-        overflow: auto; \
-        margin-top: 45px; \
-        margin-right: 100px;\
-        z-index: 5;\
-        right: 200px; \
-    } \
-    .mangalistingmo td { \
-        padding-left: 5px; \
-        padding-right: 5px; \
-    }");
+    $js.addStyle(style);
 };
 mangaListing.mo = true;
 
@@ -770,6 +829,9 @@ function follows_page() {
     console.log({msg:"Follows page"});
     mangaListing.init();
     var $lis = $$js("#chapters div.chapter-container>div.row");
+    if (!$lis.length) {
+        $lis = $$js("#chapters div.manga-entry");
+    }
     for (var i = 1; i < $lis.length; ++i) { // skip header
         mangaListing($lis[i]);
     }
@@ -904,7 +966,8 @@ function comic_page() {
 function generic_mangalisting_page() {
     // Try to autodetect different styles for mangaListings
     var $rows = $$js("div.chapter-container>div.row");
-    if ($rows) {
+    if ($rows && $rows.length) {
+        console.log({msg:"generic_mangalisting detected chapter-container rows", rows:$rows});
         mangaListing.init();
         var i = 0;
         // check to see if first row is manga or a heading
@@ -914,6 +977,16 @@ function generic_mangalisting_page() {
         for (; i < $rows.length; ++i) {
             mangaListing($rows[i]);
         }
+        return;
+    }
+    var $rows = $$js("div.manga-entry");
+    if ($rows && $rows.length) {
+        console.log({msg:"generic_mangalisting detected manga-entry rows", rows:$rows});
+        mangaListing.init();
+        for (var i = 0; i < $rows.length; ++i) {
+            mangaListing($rows[i]);
+        }
+        return;
     }
 }
 
@@ -921,7 +994,7 @@ if ("/" == window.location.pathname && window.location.search == "" && window.lo
     front_page();
 } else if (/\/chapter\//.test(window.location.pathname)) {
     comic_page();
-} else if (/\/manga\//.test(window.location.pathname) || 
+} else if (/^\/manga\//.test(window.location.pathname) || 
     /\/title\//.test(window.location.pathname) ) {
     manga_page();
 } else if (/\/follows/.test(window.location.pathname)) {
