@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.2.8
+// @version        1.2.9
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -227,7 +227,8 @@ var myKeyUp = function(e) {
 
 var config = {
     settingsKey: "MDPconfig",
-    settings: {ajaxfix: false, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true},
+    settings: {ajaxfix: false, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true,
+        mangapreview: true,},
     current: null,
     pages: {},
     init: function() {
@@ -340,6 +341,13 @@ var config = {
         var $lbl = $js.el("label", {innerHTML: "Switch ajax type if first attempt fails"});
         $lbl.setAttribute("for", "MDPajaxswitch");
         $box.onclick = function () {config.settings.ajaxswitch = this.checked; config.save();}
+        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+        
+        var $span = $js.el("span");
+        var $box = $js.el("input", {id:"MDPmangapreview", type:"checkbox", checked: this.settings.mangapreview});
+        var $lbl = $js.el("label", {innerHTML: "Enable manga previews on mouseover"});
+        $lbl.setAttribute("for", "MDPmangapreview");
+        $box.onclick = function () {config.settings.mangapreview = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
 
         var $span = $js.el("span");
@@ -532,6 +540,7 @@ var chinfo = {
 
 function mangaListing($el) {
     var _this = this;
+    if (!config.settings.mangapreview) {return;}
     this.build = function(info, $el) {
         if ($js(".mangalistingmo", $el)) {
             // already exists, just updated img
