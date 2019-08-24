@@ -937,6 +937,17 @@ function comic_page() {
             window.lastpage = pg;
             console.log("Recommended title is " + pgtitle);
             
+            if (!$js("span.page_total_num")) {try {
+                // total page count
+                let holder = $js("#jump_page").parentNode.parentNode.lastElementChild;
+                let pages = "/ " + $js("#jump_page").length;
+                //<span class="page_total_num" style="float: left;top: 8px;position: relative;">/ 30</span>  
+                let $span = $js.el("span", {class: "page_total_num", style: "float: left; top: 8px; position: relative", innerHTML: pages});
+                $js.prepend(holder, $span);
+            } catch (e) {
+                console.log({msg:"Error trying to add total page count", err: e});
+            }}
+            
             var $div = $js("#mdp_recommended");
             if ($div) { $div.remove(); }
             $div = $js.el("div", {id: "mdp_recommended"/*, innerHTML: pgtitle*/});
