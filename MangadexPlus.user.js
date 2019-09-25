@@ -392,6 +392,10 @@ var config = {
     exportlib: function() { // Exports $js to main window for debugging purposes
         window.$js = $js;
         window.$$js = $$js;
+        if (unsafeWindow) {
+            unsafeWindow.$js = exportFunction($js, unsafeWindow);
+            unsafeWindow.$$js = exportFunction($$js, unsafeWindow);
+        }
         //window.$js
     }
 };
@@ -782,45 +786,51 @@ function get_title() {
 
 function getSuggestedDownload($div, $img, title) {
     // Create holder to preserve order
-    var $span = $js.el("span");
+    let $span = $js.el("span");
     $div.appendChild($span);
     
     // Create a data blob of these images
-    var req = new XMLHttpRequest();
-    var imgsrc = (config.settings.ajaxfix ? $img.src : "//cors-anywhere.herokuapp.com/" + $img.src);
+    let req = new XMLHttpRequest();
+    let imgsrc = (config.settings.ajaxfix ? $img.src : "//cors-anywhere.herokuapp.com/" + $img.src);
     req.open("GET", imgsrc);
     $js.extend(req, {title: title, span: $span, img: $img,
                      type: $img.src.split(".").pop()});
     req.responseType = "arraybuffer";
-    req.onload = function(event) {
-        console.log({msg: "Got download resource", req: req, event: event});
-        var data = new Blob([this.response], 
+    req.handledata = function(event) {
+        let data = new Blob([this.response], 
                             {type:"image/" + (this.type == "jpg" ? "jpeg" : this.type)});
-        var $a = $js.el("a", {href: window.URL.createObjectURL(data), 
+        let $a = $js.el("a", {href: window.URL.createObjectURL(data), 
                               download: this.title + "." + this.type,
                               innerHTML: this.title});
         this.span.appendChild($a);
         this.span.appendChild($js.el("br"));
+        this.img.a = $a;
+        this.img.onclick = function(e) {
+            this.a.click();
+            return false;
+        };
+        if (unsafeWindow.$) {
+            unsafeWindow.$(this.img).off("click");
+        }
+    }
+    req.onload = function(event) {
+        console.log({msg: "Got download resource", req: req, event: event});
+        this.handledata(event);
     };
     req.onerror = function(event) {
         console.log({msg: "Error getting download resource", req: req, event: event});
         if (!config.settings.ajaxswitch) {return;}
 
-        var req2 = new XMLHttpRequest();
-        var imgsrc = (!config.settings.ajaxfix ? this.img.src : "//cors-anywhere.herokuapp.com/" + this.img.src);
+        let req2 = new XMLHttpRequest();
+        let imgsrc = (!config.settings.ajaxfix ? this.img.src : "//cors-anywhere.herokuapp.com/" + this.img.src);
         req2.open("GET", imgsrc);
         $js.extend(req2, {title: this.title, span: this.span, img: this.img,
                           type: this.type});
         req2.responseType = "arraybuffer";
+        req2.handledata = req.handledata;
         req2.onload = function(event) {
             console.log({msg: "Got download resource", req: req2, event: event});
-            var data = new Blob([this.response], 
-                                {type:"image/" + (this.type == "jpg" ? "jpeg" : this.type)});
-            var $a = $js.el("a", {href: window.URL.createObjectURL(data), 
-                                  download: this.title + "." + this.type,
-                                  innerHTML: this.title});
-            this.span.appendChild($a);
-            this.span.appendChild($js.el("br"));
+            this.handledata(event);
         };
         req2.onerror = function(event) {
             console.log({msg: "Error getting download resource from error handler", req: req2, event: event});
@@ -887,6 +897,26 @@ function front_page() {
 
 }   
 
+// for chapters that contain multiple pages
+function comic_strip(title, ch) {
+    let $imgs = $$js("div.images img");
+    if ($imgs.length) {
+        let chtitle = title + "_c" + ch; // + "p" + pg;
+        console.log("Recommended title is " + chtitle + "p[01-" + ($imgs.length+1) + "]");
+        
+        let $div = $js("#mdp_recommended");
+        if ($div) { $div.remove(); }
+        $div = $js.el("div", {id: "mdp_recommended"/*, innerHTML: pgtitle*/});
+        $js("#content").appendChild($div);
+        
+        for (let i = 0; i < $imgs.length; ++i) {
+            let pg = i + 1;
+            let pgtitle = chtitle + "p" + ( pg < 10 ? "0" + pg : pg );
+            getSuggestedDownload($div, $imgs[i], pgtitle);
+        }
+    }
+}
+
 function comic_page() {
     console.log({msg: "Comic Page"});
     if (!window.key_handlers) {
@@ -926,6 +956,10 @@ function comic_page() {
             ch = getch(ch);
             if (ch.length < 2) ch = "0"+ch;
             
+            if (!$js("#jump_page")) {
+                // multi page view
+                return comic_strip(title, ch);
+            }
             var pg = $js("#jump_page").value.trim();
             pg = /[\d]+/.exec(pg)[0];
             if (pg.length < 2) pg = "0"+pg;
