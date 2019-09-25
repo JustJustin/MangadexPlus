@@ -393,6 +393,9 @@ var config = {
         window.$js = $js;
         window.$$js = $$js;
         if (unsafeWindow) {
+            if (exportFunction === undefined) {
+                var exportFunction = function(a, b) { return a; };
+            }
             unsafeWindow.$js = exportFunction($js, unsafeWindow);
             unsafeWindow.$$js = exportFunction($$js, unsafeWindow);
         }
