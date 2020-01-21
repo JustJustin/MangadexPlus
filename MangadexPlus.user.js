@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.3.0
+// @version        1.3.1
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -776,7 +776,12 @@ function getch(name) {
     var res = re_results(re, name);
     console.log(res);
     if (res) {return res[res.length-1][0];}
-    else {return null;}
+    // no number, any special strings?
+    if (/prologue/i.test(name)) {
+        return "0";
+    }
+    // couldn't find anything
+    return null;
 }
 
 function get_title() {
