@@ -237,7 +237,7 @@ var toggleFullscreen = function() {
 
 var config = {
     settingsKey: "MDPconfig",
-    settings: {ajaxfix: false, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true,
+    settings: {ajaxfix: true, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true,
         mangapreview: true,},
     current: null,
     pages: {},
