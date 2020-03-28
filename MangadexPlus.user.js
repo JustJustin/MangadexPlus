@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.3.0
+// @version        1.3.2
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -237,7 +237,7 @@ var toggleFullscreen = function() {
 
 var config = {
     settingsKey: "MDPconfig",
-    settings: {ajaxfix: false, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true,
+    settings: {ajaxfix: true, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true,
         mangapreview: true, downloadclick: false, downloadclickstrip: true},
     current: null,
     pages: {},
@@ -407,6 +407,9 @@ var config = {
         window.$js = $js;
         window.$$js = $$js;
         if (unsafeWindow) {
+            if (exportFunction === undefined) {
+                var exportFunction = function(a, b) { return a; };
+            }
             unsafeWindow.$js = exportFunction($js, unsafeWindow);
             unsafeWindow.$$js = exportFunction($$js, unsafeWindow);
         }
@@ -787,7 +790,12 @@ function getch(name) {
     var res = re_results(re, name);
     console.log(res);
     if (res) {return res[res.length-1][0];}
-    else {return null;}
+    // no number, any special strings?
+    if (/prologue/i.test(name)) {
+        return "0";
+    }
+    // couldn't find anything
+    return null;
 }
 
 function get_title() {
