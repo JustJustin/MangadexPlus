@@ -238,7 +238,7 @@ var toggleFullscreen = function() {
 var config = {
     settingsKey: "MDPconfig",
     settings: {ajaxfix: false, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true,
-        mangapreview: true,},
+        mangapreview: true, downloadclick: false, downloadclickstrip: true},
     current: null,
     pages: {},
     init: function() {
@@ -365,6 +365,20 @@ var config = {
         var $lbl = $js.el("label", {innerHTML: "Use Window based positioning for manga previews"});
         $lbl.setAttribute("for", "MDPwindowpos");
         $box.onclick = function () {config.settings.windowbasedpos = this.checked; config.save();}
+        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+        
+        var $span = $js.el("span");
+        var $box = $js.el("input", {id:"MDPclickdownload", type:"checkbox", checked: this.settings.downloadclick});
+        var $lbl = $js.el("label", {innerHTML: "Click Images to download"});
+        $lbl.setAttribute("for", "MDPclickdownload");
+        $box.onclick = function () {config.settings.downloadclick = this.checked; config.save();}
+        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+        
+        var $span = $js.el("span");
+        var $box = $js.el("input", {id:"MDPclickdownloadstrip", type:"checkbox", checked: this.settings.downloadclickstrip});
+        var $lbl = $js.el("label", {innerHTML: "Click Images to download (Strip comics only)"});
+        $lbl.setAttribute("for", "MDPclickdownloadstrip");
+        $box.onclick = function () {config.settings.downloadclickstrip = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
 
         var $debug = this.createPage("Debug");
@@ -693,7 +707,7 @@ function mangaListing($el) {
             document.body.classList.remove("togglemo");
         }
         if (mangaListing.mo) {
-            var $mo = $js(".mangalistingmo", this);
+            let $mo = $js(".mangalistingmo", this);
             $mo.style['display'] = "block";
             $mo.calcpos();
         }
@@ -784,7 +798,7 @@ function get_title() {
     return null;
 }
 
-function getSuggestedDownload($div, $img, title) {
+function getSuggestedDownload($div, $img, title, imgClick = false) {
     // Create holder to preserve order
     let $span = $js.el("span");
     $div.appendChild($span);
@@ -805,12 +819,14 @@ function getSuggestedDownload($div, $img, title) {
         this.span.appendChild($a);
         this.span.appendChild($js.el("br"));
         this.img.a = $a;
-        this.img.onclick = function(e) {
-            this.a.click();
-            return false;
-        };
-        if (unsafeWindow.$) {
-            unsafeWindow.$(this.img).off("click");
+        if (imgClick) {
+            this.img.onclick = function(e) {
+                this.a.click();
+                return false;
+            };
+            if (unsafeWindow.$) {
+                unsafeWindow.$(this.img).off("click");
+            }
         }
     }
     req.onload = function(event) {
@@ -912,7 +928,7 @@ function comic_strip(title, ch) {
         for (let i = 0; i < $imgs.length; ++i) {
             let pg = i + 1;
             let pgtitle = chtitle + "p" + ( pg < 10 ? "0" + pg : pg );
-            getSuggestedDownload($div, $imgs[i], pgtitle);
+            getSuggestedDownload($div, $imgs[i], pgtitle, config.settings.downloadclickstrip);
         }
     }
 }
@@ -985,7 +1001,7 @@ function comic_page() {
             var $div = $js("#mdp_recommended");
             if ($div) { $div.remove(); }
             $div = $js.el("div", {id: "mdp_recommended"/*, innerHTML: pgtitle*/});
-            getSuggestedDownload($div, $js("img#current_page"), pgtitle);
+            getSuggestedDownload($div, $js("img#current_page"), pgtitle, config.settings.downloadclick);
             $js("#content").appendChild($div);
         }
     };
@@ -1044,7 +1060,7 @@ if ("/" == window.location.pathname && window.location.search == "" && window.lo
 } else if (/\/chapter\//.test(window.location.pathname)) {
     comic_page();
 } else if (/^\/manga\//.test(window.location.pathname) || 
-    /\/title\//.test(window.location.pathname) ) {
+           /\/title\//.test(window.location.pathname) ) {
     manga_page();
 } else if (/\/follows/.test(window.location.pathname)) {
     follows_page();
