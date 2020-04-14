@@ -1,7 +1,7 @@
 // ==UserScript==
 // @id             JustJustin.MangadexPlus
 // @name           Mangadex Plus
-// @version        1.3.2
+// @version        1.3.3
 // @namespace      JustJustin
 // @author         JustJustin
 // @description    Adds new features to Mangadex
@@ -166,6 +166,7 @@ var keyTimeout = null;
 var scrollInterval = null;
 var myKeyHandler = function(e){
     if(e.target.nodeName == 'INPUT') return;
+    if(e.target.nodeName == 'TEXTAREA') return;
 
     if (keyTimeout !== null) clearTimeout(keyTimeout);
     keyTimeout = setTimeout(function() {
@@ -418,6 +419,105 @@ var config = {
 };
 config.init();
 
+var mnotes = {
+    cacheKey: "mangaNotes",
+    init: function(editor, id) {
+        if (!(this.cacheKey in window.localStorage)) {
+            window.localStorage[this.cacheKey] = JSON.stringify({});
+        }
+        if (editor === undefined) {
+            editor = false;
+        }
+        if (editor && id !== undefined) {
+            this.buildNotesDialog();
+            this.id = id;
+        }
+    },
+    handlerInstalled: false,
+    promptHandler: function(event) {
+        event.preventDefault();
+        event.returnValue = "You have not closed your notes, do you want to continue without saving?";
+        return "You have not closed your notes, do you want to continue without saving?";
+    },
+    buildNotesDialog: function() {
+        $js.addStyle({
+            ".MDPnotes": {
+                position: "fixed",
+                bottom: "10px",
+                right: "10px",
+                width: "300px",
+                height: "300px",
+                display: "none",
+                border: "solid 2px grey line",
+                background: "#f0f0f0",
+            },
+            ".MDPnotesnub": {
+                position:"fixed",
+                right:"30px",
+                bottom:"10px",
+                opacity:"0.5",
+                color:"white",
+            },
+            ".MDPnoteshead": {
+                position: "relative",
+                height: "20px",
+                overflow:"auto",
+                "border-bottom": "1px solid black",
+            },
+            ".MDPnoteshead .MDPnotesclose": {float: "right", "max-height": "20px", cursor: "pointer"},
+            ".MDPnotesnub:hover": {opacity: "1", cursor: "pointer"},
+        });
+        let $nub = $js.el("div", {class:"MDPnotesnub", innerHTML: "{n}"});
+        let $box = $js.el("div", {class:"MDPnotes"});
+        $nub.addEventListener("click", () => {
+            if (getComputedStyle($box).display == "none") {
+                $box.style['display'] = "block";
+                if (!this.handlerInstalled) {
+                    window.addEventListener("beforeunload", this.promptHandler);
+                    this.handlerInstalled = true;
+                    this.load();
+                }
+            } else {
+                $box.style['display'] = "none";
+                if (this.handlerInstalled) {
+                    window.removeEventListener("beforeunload", this.promptHandler);
+                    this.handlerInstalled = false;
+                    this.save();
+                }
+            }
+        });
+        let $head = $js.el("div", {class:"MDPnoteshead"});
+        let $exit = $js.el("span", {class: "MDPnotesclose", innerHTML: "{x}"});
+        $exit.addEventListener("click", () => {
+            $box.style['display'] = "none";
+            if (this.handlerInstalled) {
+                window.removeEventListener("beforeunload", this.promptHandler);
+                this.handlerInstalled = false;
+                this.save();
+            }
+        });
+        $head.appendChild($exit);
+        $box.appendChild($head);
+        document.body.appendChild($nub);
+        document.body.appendChild($box);
+        this.$box = $box;
+        this.$head = $head;
+        let $input = $js.el("textarea", {name:"notes", id: "MDPnotesinp", rows: "10", cols: "25"});
+        $box.appendChild($input);
+        this.$input = $input;
+    },
+    load: function() {
+        let notes = JSON.parse(window.localStorage[this.cacheKey]);
+        if (this.id in notes) {
+            this.$input.innerHTML = notes[this.id];
+        }
+    },
+    save: function() {
+        let notes = JSON.parse(window.localStorage[this.cacheKey]);
+        notes[this.id] = this.$input.value;
+        window.localStorage[this.cacheKey] = JSON.stringify(notes);
+    }
+};
 var minfo = {
     cacheKey: "mangaInfo",
     init: function() {
@@ -907,6 +1007,8 @@ function manga_page() {
     var chapters = chinfo.parse(document);
     chinfo.saveChapters(id, chapters);
     console.log({msg: "cont.", chapters:chapters});
+    
+    mnotes.init(true, id);
 }
 function front_page() {
     console.log({msg: "Front Page"});
@@ -1034,6 +1136,8 @@ function comic_page() {
             }
         }
     }
+    let mid = getMangaID($js("a.manga_title").href)[0];
+    mnotes.init(true, mid);
 }
 
 function generic_mangalisting_page() {
