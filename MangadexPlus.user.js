@@ -165,7 +165,8 @@ var debug = {
 var keyTimeout = null;
 var scrollInterval = null;
 var myKeyHandler = function(e){
-    if(e.target.nodeName == 'INPUT') return;
+    if (e.target.nodeName == 'INPUT') return;
+    if (e.ctrlKey) return;
 
     if (keyTimeout !== null) clearTimeout(keyTimeout);
     keyTimeout = setTimeout(function() {
@@ -573,6 +574,7 @@ function mangaListing($el) {
     var _this = this;
     if (!config.settings.mangapreview) {return;}
     this.build = function(info, $el) {
+        debug.log({msg:"mangaListing.build()", info:info, el:$el});
         if ($el.built) {
             // already exists, just updated img
             var $img = $js(".mangalistingmo img", $el);
@@ -634,10 +636,15 @@ function mangaListing($el) {
             if (this.status != 200) {return this.onerror();}
             var $dom = this.response;
             var info = minfo.parse($dom, this.responseURL);
+            debug.log({msg:"Manga page parsed", id:info.id, info: info});
             minfo.saveInfo(info.id, info);
             var chapters = chinfo.parse($dom);
+            debug.log({msg:"Chapters Parsed", id:info.id, chapters:chapters});
+            try {
             chinfo.saveChapters(info.id, chapters);
+            } catch (err) {console.log(err);}
             mangaListing.fetched[info.id] = {info: info, chapters: chapters};
+            debug.log({msg:"fetched", fetched: mangaListing.fetched, _this:_this});
             _this.build(info, this.el);
             _this.buildChapters(chapters, this.el);
         }
@@ -894,8 +901,10 @@ function search_page() {
 }
 
 function getMangaID(url) {
-    debug.log({msg:"getMangaID", url:url});
-    return /\/((manga)|(title))\/([\d]+)\//.exec(url).slice(-1);
+    let id = /\/((manga)|(title))\/([\d]+)\//.exec(url).slice(-1);
+    if (Array.isArray(id)) {id = id[0];}
+    debug.log({msg:"getMangaID", url:url, id:id});
+    return id;
 }
 /* As in actual manga info page */
 function manga_page() {
