@@ -1001,7 +1001,7 @@ function search_page() {
 }
 
 function getMangaID(url) {
-    let id = /\/((manga)|(title))\/([\d]+)\//.exec(url).slice(-1);
+    let id = /\/((manga)|(title))\/([\d]+)/.exec(url).slice(-1);
     if (Array.isArray(id)) {id = id[0];}
     debug.log({msg:"getMangaID", url:url, id:id});
     return id;
