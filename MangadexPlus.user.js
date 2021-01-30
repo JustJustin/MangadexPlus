@@ -420,6 +420,60 @@ var config = {
 };
 config.init();
 
+var readerWidth = {
+    init: function() {
+        this.buildDialog();
+    },
+    buildDialog: function() {
+        $js.addStyle({
+            ".MDPWidth": {
+                position: "fixed",
+                bottom: "10px",
+                right: "10px",
+                width: "300px",
+                height: "300px",
+                display: "none",
+                border: "solid 2px grey line",
+                background: "#f0f0f0",
+            },
+            ".MDPWidthNub": {
+                position: "fixed",
+                right:"30px",
+                bottom:"10px",
+                opacity:"0.5",
+                color:"white",
+            },
+            ".MDPWidthHead": {
+                position: "relative",
+                height: "20px",
+                overflow:"auto",
+                "border-bottom": "1px solid black",
+            },
+            ".MDPWidthHead .MDPWidthClose": {float: "right", "max-height": "20px", cursor: "pointer"},
+            ".MDPWidthNub:hover": {opacity: "1", cursor: "pointer"},
+        });
+        let $nub = $js.el("div", {class:"MDBWidthNub", innerHTML: "{w}"});
+        let $box = $js.el("div", {class:"MDPWidth"});
+        $nub.addEventListener("click", () => {
+            if (getComputedStyle($box).display == "none") {
+                $box.style["display"] = "block";
+            } else {
+                $box.style["display"] = "none";
+            }
+        });
+        let $head = $js.el("div", {class:"MDPWidthHead"});
+        let $exit = $js.el("span", {class:"MDPWidthClose", innerHTML: "{x}"});
+        $exit.addEventListener("click", () => {
+            $box.style.display = "none";
+        });
+        $head.appendChild($exit);
+        $box.appendChild($head);
+        document.body.appendChild($nub);
+        document.body.appendChild($box);
+        this.$box = $box;
+        this.$head = $head;
+    },
+};
 var mnotes = {
     cacheKey: "mangaNotes",
     init: function(editor, id) {
@@ -1086,7 +1140,11 @@ function comic_page() {
             // sanitize title for fs
             title = title.replace(/ /g, "-").replace(/[\':]/g, "");
             
-            var ch = $js("#jump_chapter option[selected]").innerHTML.trim();
+            let $ch = $js("#jump_chapter option[selected]");
+            if (!$ch) {
+                $ch = $js("meta[property='og:title']");
+            }
+            let ch = $ch.innerHTML.trim();
             if (ch == "") {ch = "0";} // handle empty string
             ch = getch(ch);
             if (ch.length < 2) ch = "0"+ch;
