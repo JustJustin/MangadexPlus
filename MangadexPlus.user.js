@@ -410,10 +410,18 @@ var config = {
         window.$$js = $$js;
         if (unsafeWindow) {
             if (exportFunction === undefined) {
-                var exportFunction = function(a, b) { return a; };
+                var exportf = function(a, b) { 
+                    let f = "window." + a.name + " = " + a.toString();
+                    let $script = $js.el("script", {innerHTML: f});
+                    b.document.head.appendChild($script);
+                };
+            } else {
+                var exportf = function(a, b) {
+                    b[a.name] = exportFunction(a, b);
+                };
             }
-            unsafeWindow.$js = exportFunction($js, unsafeWindow);
-            unsafeWindow.$$js = exportFunction($$js, unsafeWindow);
+            exportf($js, unsafeWindow);
+            exportf($$js, unsafeWindow);
         }
         //window.$js
     }
@@ -438,7 +446,7 @@ var readerWidth = {
             },
             ".MDPWidthNub": {
                 position: "fixed",
-                right:"30px",
+                right:"50px",
                 bottom:"10px",
                 opacity:"0.5",
                 color:"white",
@@ -452,7 +460,7 @@ var readerWidth = {
             ".MDPWidthHead .MDPWidthClose": {float: "right", "max-height": "20px", cursor: "pointer"},
             ".MDPWidthNub:hover": {opacity: "1", cursor: "pointer"},
         });
-        let $nub = $js.el("div", {class:"MDBWidthNub", innerHTML: "{w}"});
+        let $nub = $js.el("div", {class:"MDPWidthNub", innerHTML: "{w}"});
         let $box = $js.el("div", {class:"MDPWidth"});
         $nub.addEventListener("click", () => {
             if (getComputedStyle($box).display == "none") {
@@ -579,6 +587,16 @@ var minfo = {
         if (!(this.cacheKey in window.localStorage)) {
             window.localStorage[this.cacheKey] = JSON.stringify({});
         }
+        this.clearButton();
+    },
+    clearButton: function() {
+        let $debug = config.pages["Debug"];
+        let $button = $js.el("button", {type: "button", innerHTML: "Clear Cache"});
+        $button.onclick = () => {this.clear(); chinfo.clear();};
+        $debug.appendChild($button);
+    },
+    clear: function() {
+        window.localStorage[this.cacheKey] = JSON.stringify({});
     },
     saveInfo: function(id, info) {
         if (info.id == "") {
@@ -590,7 +608,11 @@ var minfo = {
         }
         var cache = this.getCache();
         cache[id] = info;
-        window.localStorage[this.cacheKey] = JSON.stringify(cache);
+        try {
+            window.localStorage[this.cacheKey] = JSON.stringify(cache);
+        } catch (e) {
+            alert("Error trying to save minfo: " + e);
+        }
     },
     getCache: function() {
         return JSON.parse(window.localStorage[this.cacheKey]);
@@ -659,6 +681,9 @@ var chinfo = {
             window.localStorage[this.cacheKey] = JSON.stringify({});
         }
     },
+    clear: function() {
+        window.localStorage[this.cacheKey] = JSON.stringify({});
+    },
     getCache: function() {
         return JSON.parse(window.localStorage[this.cacheKey]);
     },
@@ -682,7 +707,11 @@ var chinfo = {
     saveChapters: function(id, chapters, update=true) {
         var cache = this.getCache();
         cache[id] = {chapters: chapters, lastupdate: update ? new Date().toJSON() : cache[id].lastupdate};
-        window.localStorage[this.cacheKey] = JSON.stringify(cache);
+        try {
+            window.localStorage[this.cacheKey] = JSON.stringify(cache);
+        } catch (e) {
+            alert("Error saving chapter info: " + e);
+        }
     },
     checkInterval: function(lastupdate) {
         lastupdate = new Date(lastupdate);
@@ -960,7 +989,7 @@ function getch(name) {
 }
 
 function get_title() {
-    var $el = $js("a.manga_title");
+    let $el = $js("a.manga-link");
     if ($el) {
         return $el.innerHTML;
     }
@@ -1105,30 +1134,107 @@ function comic_strip(title, ch) {
         }
     }
 }
-
-function comic_page() {
-    console.log({msg: "Comic Page"});
+function fix_images() {
+    let $$images = document.querySelectorAll("div#content div.images img");
+    for (let $image of $$images) {
+        if ($image.height < 50) {
+            $image.src = $image.src;
+        }
+    }
+}
+function fix_images_init() {
+    $js.addStyle({".MDPimgfixnub": {
+                  position:"fixed",
+                  right:"75px",
+                  bottom:"10px",
+                  opacity:"0.5",
+                  color:"white",
+              },
+              ".MDPimgfixnub:hover": {opacity: "1", cursor: "pointer"},
+    });
+    let $nub = $js.el("div", {class:"MDPimgfixnub", innerHTML: "{r}"});
+    $nub.onclick = () => {fix_images();};
+    document.body.appendChild($nub);
+}
+// TODO: Cleanup, used back during legacy reader, smooth scrolling still necessary for new reader
+function comic_page_handlers() {
     if (!window.key_handlers) {
         window.key_handlers = true;
         window.next_chapter = function() {
-            var $next = $js("#next_chapter_alt");
+            let $next = $js("#next_chapter_alt");
             $next && $next.click();
         }
         window.prev_chapter = function() {
-            var $prev = $js("#prev_chapter_alt");
+            let $prev = $js("#prev_chapter_alt");
             $prev && $prev.click();
         }
         window.next_page = function() {
-            var $next = $js(".next_page_alt");
+            let $next = $js(".next_page_alt");
             $next && $next.click();
         }
         window.prev_page = function() {
-            var $prev = $js(".prev_page_alt");
+            let $prev = $js(".prev_page_alt");
             $prev && $prev.click();
         }
         document.body.addEventListener("keydown", myKeyHandler);
         document.body.addEventListener("keyup", myKeyUp);
     }
+}
+// For new reader, see comic_page() for old reader
+function chapter_page() {
+    console.log({msg: "Chapter Page"});
+    let get_pg = () => { return /[\d]+/.exec( $js("span.current-page").innerHTML.trim() )[0]; }
+    
+    let $reader = $js("div.reader-images");
+    if (!$reader) {console.log({msg: "Couldn't find reader element", selector: "div.reader-images"}); return;}
+    
+    comic_page_handlers();
+    
+    // create page span
+    let $pg_div = $js.el("div", {class: "pg_status", 
+        innerHTML: "<span class='pg_status_current'></span> / <span class='pg_status_total'></span>"
+    });
+    $js.addStyle("div.pg_status { position: fixed; left: 10px ; bottom: 10px; opacity: 0.5; color: white; }");
+    let $pg_cur = $js(".pg_status_current", $pg_div);
+    let $pg_total = $js(".pg_status_total", $pg_div);
+    $pg_cur.innerHTML = get_pg();
+    $pg_total.innerHTML = $js("span.total-pages").innerHTML;
+    document.body.appendChild($pg_div);
+    
+    let $download_div = $js.el("div", {
+        class: "image_download_holder", 
+        style: "position: relative; margin: auto; padding-bottom: 5px; flex-basis:100%;",
+    });
+    $js.addStyle("body { flex-wrap: wrap; flex-direction: column; }");
+    $js.after($js("div#content"), ($download_div));
+    
+    this.update = () => {
+        $pg_cur.innerHTML = get_pg();
+        $pg_total.innerHTML = $js("span.total-pages").innerHTML;
+        
+        let $imgs = $$js("div.reader-images img");
+        let title = get_title();
+        if ($imgs.length == 1 && title) {
+            title = title.replace(/ /g, "-").replace(/[\':]/g, ""); //sanitize for fs
+            let ch = $js("#jump-chapter").selectedOptions[0].innerHTML.trim();
+            if (ch == "") {ch = "0";}
+            ch = getch(ch);
+            if (ch.length < 2) {ch = "0"+ch;}
+            
+            let pg = get_pg(); if (pg.length < 2) {pg = "0"+pg;}
+            $download_div.innerHTML = title + "_c" + ch + "p" + pg;
+        }
+    };
+    
+    let observer = new MutationObserver(this.update);
+    observer.observe($reader, {attributes: true, childList: true, subtree: true});
+    
+}
+
+// DEPRECATED
+function comic_page() {
+    console.log({msg: "Comic Page"});
+    comic_page_handlers();
     $js.addStyle("#mdp_recommended { margin-left: auto; margin-right: auto; margin-top:10px; "+
         "text-align: center; display: block; }");
     var _this = this;
@@ -1205,6 +1311,11 @@ function comic_page() {
     }
     let mid = getMangaID($js("a.manga_title").href)[0];
     mnotes.init(true, mid);
+    readerWidth.init();
+    if (!$js("#jump_page")) {
+        // comic strip/webtoon
+        fix_images_init();
+    }
 }
 
 function generic_mangalisting_page() {
@@ -1237,7 +1348,8 @@ function generic_mangalisting_page() {
 if ("/" == window.location.pathname && window.location.search == "" && window.location.hash == "") {
     front_page();
 } else if (/\/chapter\//.test(window.location.pathname)) {
-    comic_page();
+    //comic_page(); old reader
+    chapter_page(); // new reader
 } else if (/^\/manga\//.test(window.location.pathname) || 
            /\/title\//.test(window.location.pathname) ) {
     manga_page();
