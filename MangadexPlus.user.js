@@ -16,13 +16,38 @@ var $js = function(selector, root){
     if(root == null) {
         root = document.body;
     }
-    return root.querySelector(selector);
+    let ret = root.querySelector(selector);
+    if (!ret && debug && debug.log_failed_selector) {
+        console.log({msg: "Failed Selector", selector: selector});
+    }
+    return ret;
 };
 var $$js = function(selector, root){
     if(root == null) {
         root = document.body;
     }
-    return root.querySelectorAll(selector);
+    let ret = root.querySelectorAll(selector);
+    if (!ret && debug && debug.log_failed_selector) {
+        console.log({msg: "Failed Selector", selector: selector});
+    }
+    if (ret) {
+        // Provide convenience functions to easily 'find' or 'map' from Array
+        Object.defineProperty(ret, 'find', {
+            value: function(predicate) {
+                return Array.from(this).find(predicate);
+            },
+            configurable: true,
+            writable: true
+        });
+        Object.defineProperty(ret, 'map', {
+            value: function(predicate) {
+                return Array.from(this).map(predicate);
+            },
+            configurable: true,
+            writable: true
+        });
+    }
+    return ret;
 };
 $js.extend = function(object, data){
     var key, val;
@@ -155,6 +180,7 @@ var limiter = { // control ourselves...
 
 var debug = {
     default: false,
+    log_failed_selector: true,
     log: function() {
         if (this.default || config && config.settings.debug) {
             console.log.apply(console, arguments);
@@ -240,8 +266,9 @@ var toggleFullscreen = function() {
 var config = {
     settingsKey: "MDPconfig",
     settings: {ajaxfix: true, ajaxswitch: true, debug: false, exportlib: false, windowbasedpos: true,
-        mangapreview: true, downloadclick: false, downloadclickstrip: true},
+        mangapreview: true, downloadclick: false, downloadclickstrip: true, maxwidth: 0},
     current: null,
+    $style: null,
     pages: {},
     init: function() {
         if ((this.settingsKey in window.localStorage)) {
@@ -254,6 +281,7 @@ var config = {
         if (this.settings.exportlib) {
             this.exportlib();
         }
+        this.updateMaxWidth();
     },
     buildSettingsDialog: function() {
         $js.addStyle(".MDPconfig {\
@@ -382,6 +410,23 @@ var config = {
         $lbl.setAttribute("for", "MDPclickdownloadstrip");
         $box.onclick = function () {config.settings.downloadclickstrip = this.checked; config.save();}
         $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
+        
+        $span = $js.el("span");
+        $box = $js.el("input", {id:"MDPwidth", type:"text", value: this.settings.maxwidth});
+        $lbl = $js.el("label", {innerHTML: "Max Width %"});
+        $lbl.setAttribute("for", "MDPwidth");
+        $box.onchange = (e) => {
+            let value = parseInt(e.target.value, 10);
+            console.log({val: value, isint: Number.isInteger(value), less: value <= 100, more: value >= 0});
+            if (Number.isInteger(value) && value <= 100 && value >= 0) {
+                this.settings.maxwidth = value;
+                this.updateMaxWidth();
+                this.save();
+            } else {
+                e.target.value = this.settings.maxwidth;
+            }
+        };
+        $span.appendChild($box); $span.appendChild($lbl); $main.appendChild($span);
 
         var $debug = this.createPage("Debug");
 
@@ -424,6 +469,18 @@ var config = {
             exportf($$js, unsafeWindow);
         }
         //window.$js
+    },
+    updateMaxWidth: function() {
+        if (!this.$style) {
+            this.$style = $js.el("style", {type: "text/css"});
+            document.head.appendChild(this.$style);
+        }
+        let width = this.settings.maxwidth;
+        if (width == 0) {
+            this.$style.innerHTML = "";
+        } else {
+            this.$style.innerHTML = "div.reader-images img { max-width: " + width +"vw !important; }";
+        }
     }
 };
 config.init();
@@ -989,9 +1046,9 @@ function getch(name) {
 }
 
 function get_title() {
-    let $el = $js("a.manga-link");
+    let $el = $js("div.menu a");
     if ($el) {
-        return $el.innerHTML;
+        return $el.innerText;
     }
     return null;
 }
@@ -1112,7 +1169,6 @@ function front_page() {
     for (var i = 0; i < $all.length; ++i) {
         mangaListing($all[i]);
     }
-
 }   
 
 // for chapters that contain multiple pages
@@ -1183,139 +1239,88 @@ function comic_page_handlers() {
 // For new reader, see comic_page() for old reader
 function chapter_page() {
     console.log({msg: "Chapter Page"});
-    let get_pg = () => { return /[\d]+/.exec( $js("span.current-page").innerHTML.trim() )[0]; }
+    let get_pg = () => { 
+        let $select = $$js("div.menu div.md-select").find((el)=>{return el.innerText.includes("Page");});
+        return /[\d]+/.exec($select.innerText.trim())[0];
+    };
+    let get_last_pg = () => {
+        let $select = $$js("div.menu div.md-select").find((el)=>{return el.innerText.includes("Page");});
+        return $select.children[1].children.length;
+    }
+    let get_chapter = () => {
+        let $select = $$js("div.menu div.md-select").find((el)=>{return el.innerText.includes("Chapter");});
+        return $js("div.placeholder-text", $select).innerText.trim();
+    }
     
-    let $reader = $js("div.reader-images");
+    let $reader = $js("div.md--reader");
     if (!$reader) {console.log({msg: "Couldn't find reader element", selector: "div.reader-images"}); return;}
+
+    try {
+        get_pg();
+    } catch(e) {
+        let observer = new MutationObserver((mutations, observer) => {
+            try {
+                get_pg();
+                observer.disconnect();
+                chapter_page();
+            } catch(e) {console.log(e);}
+        });
+        observer.observe($reader, {childList: true, subtree: true});
+        return;
+    }
     
     comic_page_handlers();
     
     // create page span
     let $pg_div = $js.el("div", {class: "pg_status", 
-        innerHTML: "<span class='pg_status_current'></span> / <span class='pg_status_total'></span>"
+        innerHTML: "<span class='pg_status_current'></span> / <span class='pg_status_total'></span>&nbsp;<span class='pg_status_title'></span>"
     });
-    $js.addStyle("div.pg_status { position: fixed; left: 10px ; bottom: 10px; opacity: 0.5; color: white; }");
+    $js.addStyle("div.pg_status { position: fixed; left: 10px ; bottom: 10px; opacity: 0.5; color: white; } span.pg_status_title {user-select: all; opacity:25%;} span.pg_status_title:hover {opacity:100%}");
     let $pg_cur = $js(".pg_status_current", $pg_div);
     let $pg_total = $js(".pg_status_total", $pg_div);
+    let $pg_title = $js(".pg_status_title", $pg_div);
     $pg_cur.innerHTML = get_pg();
-    $pg_total.innerHTML = $js("span.total-pages").innerHTML;
-    document.body.appendChild($pg_div);
+    $pg_total.innerHTML = get_last_pg();
+    $js.after(document.body, $pg_div);
     
     let $download_div = $js.el("div", {
         class: "image_download_holder", 
         style: "position: relative; margin: auto; padding-bottom: 5px; flex-basis:100%;",
     });
     $js.addStyle("body { flex-wrap: wrap; flex-direction: column; }");
-    $js.after($js("div#content"), ($download_div));
+    $js.after($reader, ($download_div));
     
     this.update = () => {
-        $pg_cur.innerHTML = get_pg();
-        $pg_total.innerHTML = $js("span.total-pages").innerHTML;
-        
-        let $imgs = $$js("div.reader-images img");
-        let title = get_title();
-        if ($imgs.length == 1 && title) {
-            title = title.replace(/ /g, "-").replace(/[\':]/g, ""); //sanitize for fs
-            let ch = $js("#jump-chapter").selectedOptions[0].innerHTML.trim();
-            if (ch == "") {ch = "0";}
-            ch = getch(ch);
-            if (ch.length < 2) {ch = "0"+ch;}
+        try {
+            $pg_cur.innerHTML = get_pg();
+            $pg_total.innerHTML = get_last_pg();
             
-            let pg = get_pg(); if (pg.length < 2) {pg = "0"+pg;}
-            $download_div.innerHTML = title + "_c" + ch + "p" + pg;
+            let $imgs = $$js("div.md--pages div.md--page");
+            let title = get_title();
+            if (title) {
+                title = title.replace(/ /g, "-").replace(/[\':]/g, ""); //sanitize for fs
+                let ch = get_chapter();
+                if (ch == "") {ch = "0";}
+                ch = getch(ch);
+                if (ch.length < 2) {ch = "0"+ch;}
+                
+                let pg = get_pg(); if (pg.length < 2) {pg = "0"+pg;}
+                if ($imgs.length == 1) {
+                    $download_div.innerHTML = title + "_c" + ch + "p" + pg;
+                    $pg_title.innerHTML = "";
+                } else {
+                    $download_div.innerHTML = "";
+                    $pg_title.innerHTML =  title + "_c" + ch + "p" + pg;
+                }
+            }
+        } catch(e) {
+            console.log(e);
         }
     };
     
     let observer = new MutationObserver(this.update);
-    observer.observe($reader, {attributes: true, childList: true, subtree: true});
+    observer.observe($js("div.menu"), {attributes: true, childList: true, subtree: true});
     
-}
-
-// DEPRECATED
-function comic_page() {
-    console.log({msg: "Comic Page"});
-    comic_page_handlers();
-    $js.addStyle("#mdp_recommended { margin-left: auto; margin-right: auto; margin-top:10px; "+
-        "text-align: center; display: block; }");
-    var _this = this;
-    this.update = function() {
-        // Functionality that is triggered when page content is updated.
-        var title = get_title();
-        console.log({msg:"Chapter Update Handler", title:title});
-        if (title) {
-            // sanitize title for fs
-            title = title.replace(/ /g, "-").replace(/[\':]/g, "");
-            
-            let $ch = $js("#jump_chapter option[selected]");
-            if (!$ch) {
-                $ch = $js("meta[property='og:title']");
-            }
-            let ch = $ch.innerHTML.trim();
-            if (ch == "") {ch = "0";} // handle empty string
-            ch = getch(ch);
-            if (ch.length < 2) ch = "0"+ch;
-            
-            if (!$js("#jump_page")) {
-                // multi page view
-                return comic_strip(title, ch);
-            }
-            var pg = $js("#jump_page").value.trim();
-            pg = /[\d]+/.exec(pg)[0];
-            if (pg.length < 2) pg = "0"+pg;
-            var pgtitle = title + "_c" + ch + "p" + pg;
-            if (window.lastpage && window.lastpage == pg) {
-                setTimeout(_this.update, 250);
-                return;
-            }
-            window.lastpage = pg;
-            console.log("Recommended title is " + pgtitle);
-            
-            if (!$js("span.page_total_num")) {try {
-                // total page count
-                let holder = $js("#jump_page").parentNode.parentNode.lastElementChild;
-                let pages = "/ " + $js("#jump_page").length;
-                //<span class="page_total_num" style="float: left;top: 8px;position: relative;">/ 30</span>  
-                let $span = $js.el("span", {class: "page_total_num", style: "float: left; top: 8px; position: relative", innerHTML: pages});
-                $js.prepend(holder, $span);
-            } catch (e) {
-                console.log({msg:"Error trying to add total page count", err: e});
-            }}
-            
-            var $div = $js("#mdp_recommended");
-            if ($div) { $div.remove(); }
-            $div = $js.el("div", {id: "mdp_recommended"/*, innerHTML: pgtitle*/});
-            getSuggestedDownload($div, $js("img#current_page"), pgtitle, config.settings.downloadclick);
-            $js("#content").appendChild($div);
-        }
-    };
-    // install mutation observer
-    var observer = new MutationObserver(this.update);
-    //observer.observe($js("#jump_page"), {attributes: true, childList: true, subtree: true});
-    observer.observe($js("div.images"), {attributes: true, childList: true, subtree: true});
-    this.update();
-
-    // update chapter info
-    var chid = chinfo.getChID(window.location.pathname);
-    if (chid) {
-        var id = getMangaID($js("a.manga_title").href);
-        var chapters = chinfo.getFromCache(id, true);
-        for (var i = 0; i < chapters.length; ++i) {
-            console.log(chid + " == " + chinfo.getChID(chapters[i].href));
-            if (chapters[i].href && (chinfo.getChID(chapters[i].href) == chid)) {
-                chapters[i].read = true;
-                console.log({msg:"Updating Ch read status", ch: chapters[i]});
-                chinfo.saveChapters(id, chapters, false);
-                break;
-            }
-        }
-    }
-    let mid = getMangaID($js("a.manga_title").href)[0];
-    mnotes.init(true, mid);
-    readerWidth.init();
-    if (!$js("#jump_page")) {
-        // comic strip/webtoon
-        fix_images_init();
-    }
 }
 
 function generic_mangalisting_page() {
@@ -1346,18 +1351,30 @@ function generic_mangalisting_page() {
 }
 
 if ("/" == window.location.pathname && window.location.search == "" && window.location.hash == "") {
-    front_page();
+    //front_page();
 } else if (/\/chapter\//.test(window.location.pathname)) {
-    //comic_page(); old reader
-    chapter_page(); // new reader
+
+    // Wait for element to become available
+    const observer = new MutationObserver((mutations, observer) => {
+        if (document.querySelector("div.md--reader")) {
+            try {
+                chapter_page(); // new reader
+            } catch (e) {
+                console.log(e);
+            }
+            observer.disconnect();
+        }
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+    
 } else if (/^\/manga\//.test(window.location.pathname) || 
            /\/title\//.test(window.location.pathname) ) {
     manga_page();
 } else if (/\/follows/.test(window.location.pathname)) {
-    follows_page();
+    //follows_page();
 } else if ("/" == window.location.pathname && /page\=search/.test(window.location.href)) {
-    search_page();
+    //search_page();
 } else {
     // Try to work on all pages generically. 
-    generic_mangalisting_page();
+    //generic_mangalisting_page();
 }
